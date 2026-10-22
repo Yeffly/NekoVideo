@@ -1,6 +1,0 @@
-Updated to NekoVideo 1.3.4.
-New playback speed control built into the player.
-Redesigned track and subtitle selection with a cleaner look.
-Video now pauses while you pick audio, subtitles, or speed.
-Frame preview when dragging the seek bar for precise navigation.
-Improved swipe gestures to avoid accidental seeks.

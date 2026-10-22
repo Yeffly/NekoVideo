@@ -1,1 +1,0 @@
-Open-source local video player with folders, private content and DLNA cast
