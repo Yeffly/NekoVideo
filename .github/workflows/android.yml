@@ -1,0 +1,57 @@
+name: Android CI
+
+on:
+  push:
+    branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NekoVideo-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      # Release build enables R8 minification and resource shrinking.
+      # It is allowed to fail so a debug build stays green if ProGuard rules need tuning.
+      - name: Build Release APK (unsigned)
+        continue-on-error: true
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Upload Release APK (unsigned)
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NekoVideo-release-unsigned
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: ignore
