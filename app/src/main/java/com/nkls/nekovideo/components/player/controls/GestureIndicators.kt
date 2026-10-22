@@ -1,0 +1,213 @@
+package com.nkls.nekovideo.components.player
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Brightness6
+import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.nkls.nekovideo.R
+
+/**
+ * Indicadores visuais para gestos do player (seek)
+ */
+@Composable
+fun GestureIndicators(
+    seekInfo: String?,
+    seekAlignment: Alignment = Alignment.Center,
+    volumeInfo: String? = null,
+    brightnessInfo: String? = null
+) {
+    var displayedSeekInfo by remember { mutableStateOf<String?>(null) }
+    var displayedVolumeInfo by remember { mutableStateOf<String?>(null) }
+    var displayedBrightnessInfo by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(seekInfo) {
+        if (seekInfo != null) {
+            displayedSeekInfo = seekInfo
+        }
+    }
+
+    LaunchedEffect(volumeInfo) {
+        if (volumeInfo != null) {
+            displayedVolumeInfo = volumeInfo
+        }
+    }
+
+    LaunchedEffect(brightnessInfo) {
+        if (brightnessInfo != null) {
+            displayedBrightnessInfo = brightnessInfo
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Indicador de seek (posição dinâmica)
+        AnimatedVisibility(
+            visible = seekInfo != null,
+            enter = fadeIn(animationSpec = tween(200)) + scaleIn(animationSpec = tween(200)),
+            exit = fadeOut(animationSpec = tween(200)) + scaleOut(animationSpec = tween(200)),
+            modifier = Modifier.align(seekAlignment)
+        ) {
+            val currentSeekInfo = displayedSeekInfo ?: seekInfo ?: return@AnimatedVisibility
+
+            Box(
+                modifier = Modifier.padding(32.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val isAdvancing = currentSeekInfo.startsWith("+")
+                    val seekIcon = if (isAdvancing) Icons.Default.FastForward else Icons.Default.FastRewind
+
+                    if (isAdvancing) {
+                        Text(
+                            text = currentSeekInfo,
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            style = TextStyle(
+                                shadow = Shadow(
+                                    color = Color.Black,
+                                    offset = Offset(2f, 2f),
+                                    blurRadius = 4f
+                                )
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            imageVector = seekIcon,
+                            contentDescription = stringResource(R.string.player_seek_forward),
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = seekIcon,
+                            contentDescription = stringResource(R.string.player_seek_backward),
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = currentSeekInfo,
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            style = TextStyle(
+                                shadow = Shadow(
+                                    color = Color.Black,
+                                    offset = Offset(2f, 2f),
+                                    blurRadius = 4f
+                                )
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = brightnessInfo != null,
+            enter = fadeIn(animationSpec = tween(200)) + scaleIn(animationSpec = tween(200)),
+            exit = fadeOut(animationSpec = tween(200)) + scaleOut(animationSpec = tween(200)),
+            modifier = Modifier.align(Alignment.CenterStart)
+        ) {
+            val currentBrightnessInfo = displayedBrightnessInfo ?: brightnessInfo ?: return@AnimatedVisibility
+
+            GestureValueIndicator(
+                text = currentBrightnessInfo,
+                icon = { modifier ->
+                    Icon(
+                        imageVector = Icons.Default.Brightness6,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = modifier
+                    )
+                }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = volumeInfo != null,
+            enter = fadeIn(animationSpec = tween(200)) + scaleIn(animationSpec = tween(200)),
+            exit = fadeOut(animationSpec = tween(200)) + scaleOut(animationSpec = tween(200)),
+            modifier = Modifier.align(Alignment.CenterEnd)
+        ) {
+            val currentVolumeInfo = displayedVolumeInfo ?: volumeInfo ?: return@AnimatedVisibility
+
+            GestureValueIndicator(
+                text = currentVolumeInfo,
+                icon = { modifier ->
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = modifier
+                    )
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun GestureValueIndicator(
+    text: String,
+    icon: @Composable (Modifier) -> Unit
+) {
+    Box(
+        modifier = Modifier.padding(32.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            icon(Modifier.size(28.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = text,
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                style = TextStyle(
+                    shadow = Shadow(
+                        color = Color.Black,
+                        offset = Offset(2f, 2f),
+                        blurRadius = 4f
+                    )
+                )
+            )
+        }
+    }
+}

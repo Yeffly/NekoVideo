@@ -1,0 +1,528 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Button actions -->
+    <string name="action_paste_here">Вставить здесь</string>
+    <string name="action_cancel">Отмена</string>
+    <string name="action_cancel_operation">Отменить операцию</string>
+    <string name="action_unlock">Разблокировать</string>
+    <string name="action_protect">Переместить в защищённую папку</string>
+    <string name="action_unprivatize">Сделать публичным</string>
+    <string name="action_privatize">Сделать приватным</string>
+    <string name="action_lock_folder">Заблокировать</string>
+    <string name="action_unlock_folder">Разблокировать папку</string>
+    <string name="locking_folder">Блокировка папки...</string>
+    <string name="locking_progress">Блокировка... %1$d/%2$d файлов</string>
+    <string name="unlocking_folder">Разблокировка папки...</string>
+    <string name="unlocking_progress">Разблокировка... %1$d/%2$d файлов</string>
+    <string name="moving_files">Перемещение файлов...</string>
+    <string name="moving_progress">Перемещение... %1$d/%2$d файлов</string>
+    <string name="deleting_items">Удаление элементов...</string>
+    <string name="deleting_progress">Удаление... %1$d/%2$d элементов</string>
+    <string name="folder_locked_success">Папка успешно заблокирована</string>
+    <string name="folder_unlocked_success">Папка успешно разблокирована</string>
+    <string name="enter_password_to_lock">Введите пароль для блокировки папки</string>
+    <string name="enter_password_to_unlock">Введите пароль для разблокировки</string>
+    <string name="enter_password_to_view">Введите пароль для просмотра</string>
+    <string name="invalid_password_or_corrupted">Неверный пароль или повреждённые данные</string>
+    <string name="locked_folder">Заблокированная папка</string>
+    <string name="action_delete">Удалить</string>
+    <string name="action_rename">Переименовать</string>
+    <string name="action_move">Переместить</string>
+    <string name="action_share">Поделиться</string>
+    <string name="action_tags">Теги</string>
+    <string name="action_pin_folder">Закрепить папку</string>
+    <string name="action_unpin_folder">Открепить папку</string>
+    <string name="pinned_folders_title">Закреплённые папки</string>
+    <string name="pinned_folder_unavailable">Папка не найдена</string>
+    <string name="pin_folder_success">Папка закреплена</string>
+    <string name="unpin_folder_success">Папка откреплена</string>
+    <string name="unpin_folder_confirm_title">Открепить папку?</string>
+    <string name="unpin_folder_confirm_message">Удалить "%1$s" из закреплённых папок?</string>
+    <string name="pin_folder_already_pinned">Эта папка уже закреплена</string>
+    <string name="pin_folder_limit_reached">Достигнут лимит закреплённых папок</string>
+    <string name="pin_folder_invalid">Можно закреплять только существующие папки</string>
+    <string name="share_videos">Поделиться видео</string>
+    <string name="action_shuffle_play">Случайно</string>
+    <string name="action_create_folder">Новая папка</string>
+    <string name="action_settings">Настройки</string>
+    <string name="no_videos_found">Нет видео в этой папке</string>
+    <string name="empty_folder_title">Папка пуста</string>
+    <string name="empty_folder_message">Сейчас здесь нет видимых папок или видео.</string>
+    <string name="neko_private_folder_name">Личное Хранилище</string>
+    <string name="secure_folders_hidden">Защищённые папки скрыты</string>
+    <string name="secure_folders_shown">Защищённые папки отображены</string>
+    <string name="select_private_folders_to_unprivatize">Выберите приватные папки для отмены приватности</string>
+    <string name="select_valid_folders_to_privatize">Выберите подходящие папки для приватности</string>
+    <string name="unprivatizing_folders">Отмена приватности папок...</string>
+    <string name="privatizing_folders">Приватизация папок...</string>
+    <string name="unprivatize_title">Сделать публичным</string>
+    <string name="privatize_title">Сделать приватным</string>
+    <string name="move_mode_activated">Режим перемещения активирован. Перейдите к назначению и вставьте.</string>
+    <string name="move_operation_cancelled">Операция перемещения отменена</string>
+    <string name="items_moved">Элементы перемещены!</string>
+    <string name="move_destination_title">Переместить в...</string>
+    <string name="move_destination_subtitle">Выберите папку назначения для %1$d элемент(ов)</string>
+    <string name="move_destination_root">Внутренняя память</string>
+    <string name="move_destination_no_folders">Здесь нет доступных подпапок</string>
+    <string name="move_destination_confirm">Переместить сюда</string>
+    <string name="files_secured">Файлы защищены!</string>
+    <string name="items_deleted_locked">Элементы удалены!</string>
+    <string name="folder_created">Папка создана</string>
+    <string name="action_set_secure_folder">Установить Защищённой Папкой</string>
+    <string name="secure_folder_set">Эта папка теперь защищённая папка!</string>
+    <string name="pull_to_refresh_tutorial">Потяните вниз, чтобы обновить видео</string>
+
+    <!-- Content descriptions -->
+    <string name="cancel_description">Отмена</string>
+    <string name="paste_here_description">Вставить здесь</string>
+    <string name="actions_description">Действия</string>
+    <string name="options_description">Опции</string>
+
+    <string name="loading">Загрузка...</string>
+    <string name="updating_index">Обновление индекса...</string>
+    <string name="indexing_videos">Индексация видео...</string>
+    <string name="pull_down_to_scan">В этой папке не найдено совместимых видео</string>
+
+    <string name="available_devices">Доступные устройства</string>
+    <string name="refresh">Обновить</string>
+    <string name="previous">Назад</string>
+    <string name="play">Воспроизвести</string>
+    <string name="pause">Пауза</string>
+    <string name="next">Далее</string>
+    <string name="press_back_again_to_exit">Нажмите назад ещё раз, чтобы выйти</string>
+
+    <!-- Premium -->
+    <string name="premium_title">Убрать Рекламу</string>
+    <string name="premium_description">Поддержите разработку и наслаждайтесь без рекламы!</string>
+    <string name="premium_no_ads">Без рекламы</string>
+    <string name="premium_support">Поддержать разработчика</string>
+    <string name="premium_active">Премиум Активен</string>
+    <string name="premium_thanks">Спасибо за вашу поддержку!</string>
+
+    <!-- Bottom sheet headers -->
+    <string name="mode_move_files">Режим: Перемещение файлов</string>
+    <string name="item_actions">Действия с элементом</string>
+    <string name="options">Опции</string>
+    <string name="navigate_to_destination">Перейдите к месту назначения и вставьте файлы</string>
+
+    <!-- Interface Settings -->
+    <string name="settings_appearance">Внешний вид</string>
+    <string name="settings_language">Язык</string>
+    <string name="settings_dark_mode">Темная тема</string>
+    <string name="settings_dark_mode_desc">Внешний вид интерфейса</string>
+    <string name="settings_app_language">Язык приложения</string>
+    <string name="settings_app_language_desc">Язык интерфейса</string>
+
+    <!-- Rename dialogs -->
+    <string name="rename_item">Переименовать элемент</string>
+    <string name="renaming_item">Переименование элемента...</string>
+    <string name="new_name">Новое имя</string>
+    <string name="rename_multiple_items">Переименовать несколько элементов</string>
+    <string name="selected_items_count">Выбрано элементов: %d</string>
+    <string name="video_tags_title">Теги видео</string>
+    <string name="video_tags_empty">Теги ещё не созданы</string>
+    <string name="video_tags_empty_desc">Создайте теги, чтобы упорядочить видео и позже использовать их в shuffle.</string>
+    <string name="video_tags_create">Создать тег</string>
+    <string name="edit_tag">Редактировать тег</string>
+    <string name="video_tags_new_label">Название тега</string>
+    <string name="video_tags_save">Сохранить теги</string>
+    <string name="video_tags_choose">Выберите теги, которые нужно добавить к выбранным видео</string>
+    <string name="video_tags_add_success">Теги для видео обновлены</string>
+    <string name="video_tags_create_success">Тег создан</string>
+    <string name="video_tags_name_empty">Введите название тега</string>
+    <string name="video_tags_name_exists">Такой тег уже существует</string>
+    <string name="video_tags_none_selected">Выберите хотя бы один тег</string>
+    <string name="shuffle_tags_title">Shuffle по тегам</string>
+    <string name="shuffle_tags_description">Нажимайте на тег, чтобы переключать режимы: обязательный, дополнительный, исключённый и нейтральный. В видео должны быть все обязательные теги и хотя бы один дополнительный, если они выбраны. Видео с исключёнными тегами всегда удаляются.</string>
+    <string name="shuffle_tags_empty">Теги ещё не созданы. Сначала добавьте теги к видео.</string>
+    <string name="shuffle_tags_hint_message">Удерживайте, чтобы открыть фильтр тегов</string>
+    <string name="shuffle_tags_confirm">Создать shuffle</string>
+    <string name="new_playlist_confirm_title">Новый плейлист?</string>
+    <string name="new_playlist_confirm_message">Уже есть активный плейлист. Запуск нового плейлиста заменит текущий. Продолжить?</string>
+    <string name="shuffle_tags_no_match">Видео с выбранными тегами не найдены</string>
+    <string name="shuffle_tags_mode_neutral">Нейтрально</string>
+    <string name="shuffle_tags_mode_required">Обязательный</string>
+    <string name="shuffle_tags_mode_include">Дополнительный (любой)</string>
+    <string name="shuffle_tags_mode_exclude">Игнорировать в shuffle</string>
+
+    <!-- Permissions -->
+    <string name="permission_title">Требуется доступ к файлам</string>
+    <string name="permission_description">Для правильной работы это приложение нуждается в доступе ко всем файлам на вашем устройстве. Это позволяет просматривать и воспроизводить ваши видео.</string>
+    <string name="permission_button">Разрешить доступ к файлам</string>
+    <string name="permission_instructions">Нажмите кнопку выше и включите Разрешить доступ для управления всеми файлами в системных настройках.</string>
+
+    <!-- Pull to Refresh Tutorial -->
+    <string name="pull_to_refresh_title">Потяните вниз для обновления</string>
+    <string name="pull_to_refresh_description">Удерживайте и тяните эту область вниз для ручного обновления ваших видео</string>
+    <string name="updating_videos">Обновление видео...</string>
+    <string name="pull_to_refresh">Потяните для обновления</string>
+    <string name="release_to_refresh">Отпустите для обновления</string>
+    <string name="pull_to_refresh_empty">Нажмите на значок, чтобы обновить индекс видео</string>
+
+    <!-- Themes -->
+    <string name="theme_light">Светлая</string>
+    <string name="theme_dark">Темная</string>
+    <string name="theme_system">Следовать системе</string>
+
+    <!-- Languages -->
+    <string name="language_system">Следовать системе</string>
+    <string name="language_portuguese">Português (Brasil)</string>
+    <string name="language_english">English</string>
+    <string name="language_spanish">Español</string>
+    <string name="language_french">Français</string>
+    <string name="language_german">Deutsch</string>
+    <string name="language_russian">Русский</string>
+    <string name="language_hindi">हिन्दी</string>
+    <string name="language_chinese">简体中文</string>
+    <string name="language_chinese_traditional">繁體中文</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_playback">Воспроизведение</string>
+    <string name="settings_playback_desc">Управление воспроизведением и поведение плеера</string>
+    <string name="settings_interface">Интерфейс</string>
+    <string name="settings_interface_desc">Внешний вид и тема приложения</string>
+    <string name="settings_display">Отображение</string>
+    <string name="settings_display_desc">Миниатюры, сетка и отображение информации</string>
+    <string name="settings_files">Файлы</string>
+    <string name="settings_files_desc">Управление папками и файлами</string>
+    <string name="settings_performance">Производительность</string>
+    <string name="settings_performance_desc">Кэш и оптимизация производительности</string>
+    <string name="settings_storage">Хранилище и кэш</string>
+    <string name="settings_storage_desc">Управление кэшем миниатюр</string>
+    <string name="settings_tags">Теги</string>
+    <string name="settings_tags_desc">Управление тегами для обычных и приватных видео</string>
+    <string name="settings_about">О программе</string>
+    <string name="settings_about_desc">Информация о приложении и поддержка</string>
+    <string name="settings_changelog">Changelog (v%1$s)</string>
+    <string name="settings_changelog_desc">Посмотрите, что изменилось и как использовать новые функции</string>
+    <string name="changelog_title">Changelog</string>
+    <string name="changelog_latest_title">Что нового в v%1$s</string>
+    <string name="changelog_rotation_title">Новые режимы поворота</string>
+    <string name="changelog_rotation_desc">Нажмите кнопку поворота в плеере, чтобы переключаться между этими режимами. Выбранный режим сохраняется:</string>
+    <string-array name="changelog_item_titles">
+        <item>Сортировка сохраняется</item>
+    </string-array>
+    <string-array name="changelog_item_descriptions">
+        <item>Выбранный порядок видео в папках сохраняется после возврата из настроек и повторного запуска приложения.</item>
+    </string-array>
+    <string name="changelog_pinned_folders_title">Быстрее приватные папки</string>
+    <string name="changelog_pinned_folders_desc">Исправлена проблема, из-за которой могли появляться зависания при быстром переключении видео в приватных папках.</string>
+    <string name="changelog_continue_watching_title">Оптимизированные миниатюры</string>
+    <string name="changelog_continue_watching_desc">Миниатюры, используемые во время воспроизведения, оптимизированы для снижения нагрузки на устройство.</string>
+    <string name="changelog_external_player_title">Стабильнее большие плейлисты</string>
+    <string name="changelog_external_player_desc">Улучшена стабильность плеера при навигации по спискам с большим количеством видео.</string>
+    <string name="changelog_background_playback_title">Более плавное воспроизведение</string>
+    <string name="changelog_background_playback_desc">Обновления обложек плеера теперь избегают лишней работы при быстром пропуске видео.</string>
+    <string name="changelog_dark_theme_title">Более безопасные действия</string>
+    <string name="changelog_dark_theme_desc">Во время действий вроде перемещения, сделать приватным, убрать приватность и удаления окно обработки больше нельзя закрыть вручную нажатием снаружи, кнопкой назад или перетаскиванием.</string>
+    <string name="changelog_pip_title">Специальная приватная папка</string>
+    <string name="changelog_pip_desc">Специальная приватная папка в корне теперь показывает только действие перемешивания и скрывает недопустимые действия: переименовать, переместить, закрепить, сделать приватным, убрать приватность и удалить.</string>
+    <string name="changelog_credits_title">Визуальная обратная связь</string>
+    <string name="changelog_credits_desc">Значок приложения в TopBar теперь быстро уменьшается при касании, поэтому действие по 3 кликам легче заметить.</string>
+    <string name="settings_security">Безопасность и конфиденциальность</string>
+    <string name="settings_security_desc">Биометрия и настройки пароля</string>
+    <string name="security_title">Безопасность и конфиденциальность</string>
+    <string name="biometric_section">Биометрия</string>
+    <string name="biometric_unlock">Биометрическая разблокировка</string>
+    <string name="biometric_unlock_desc">Используйте отпечаток пальца или лицо для разблокировки личных папок</string>
+    <string name="biometric_unlock_title">Разблокировать личную папку</string>
+    <string name="biometric_use_password">Использовать пароль</string>
+    <string name="biometric_scanning">Ожидание биометрии…</string>
+    <string name="biometric_not_available">Биометрия недоступна на этом устройстве</string>
+    <string name="biometric_no_password">Сначала установите пароль конфиденциальности</string>
+    <string name="biometric_enable_title">Включить биометрическую разблокировку?</string>
+    <string name="biometric_enable_desc">Используйте биометрию для разблокировки личных папок без ввода пароля.</string>
+    <string name="biometric_enable_confirm">Включить биометрию</string>
+    <string name="biometric_enable_prompt_title">Включить биометрию</string>
+    <string name="biometric_enable_prompt_subtitle">Подтвердите, чтобы включить биометрическую разблокировку</string>
+    <string name="biometric_enable_cancel">Отмена</string>
+    <string name="biometric_not_now">Не сейчас</string>
+    <string name="biometric_enabled_success">Биометрия успешно активирована!</string>
+    <string name="biometric_disabled">Биометрия отключена.</string>
+    <string name="change_password">Изменить пароль</string>
+    <string name="change_password_desc">Обновляет пароль для всех личных папок</string>
+    <string name="change_password_title">Изменить пароль</string>
+    <string name="change_password_step_old">Текущий пароль</string>
+    <string name="change_password_step_new">Новый пароль</string>
+    <string name="change_password_confirm_new">Подтвердите новый пароль</string>
+    <string name="change_password_next">Далее</string>
+    <string name="change_password_confirm_btn">Подтвердить</string>
+    <string name="change_password_processing">Обновление личных папок…</string>
+    <string name="change_password_success">Пароль успешно изменён!</string>
+    <string name="change_password_section">Пароль</string>
+    <string name="biometric_reactivate_prompt_title">Повторно активировать биометрию</string>
+    <string name="biometric_reactivate_prompt_subtitle">Подтвердите обновление биометрической разблокировки с новым паролем</string>
+    <string name="biometric_reactivated">Биометрия успешно обновлена!</string>
+    <string name="biometric_deactivated_reactivate">Биометрия отключена. Повторно активируйте в разделе Безопасность и конфиденциальность.</string>
+    <string name="storage_thumbnails_section">Кэш миниатюр</string>
+    <string name="storage_clear_thumbnails">Очистить кэш миниатюр</string>
+    <string name="storage_clear_thumbnails_desc">Удаляет все сохранённые миниатюры. Они будут созданы заново при просмотре папок</string>
+    <string name="storage_clear_thumbnails_success">Кэш миниатюр успешно очищен</string>
+    <string name="storage_clearing">Очистка… осталось %1$s</string>
+    <string name="storage_clear_continue_watching">Очистить историю продолжения просмотра</string>
+    <string name="storage_clear_continue_watching_desc">Удаляет карточку в корне и все сохранённые точки продолжения для видео</string>
+    <string name="storage_clear_continue_watching_success">История продолжения просмотра успешно очищена</string>
+    <string name="tags_title">Теги</string>
+    <string name="tags_normal_section">Теги обычных видео</string>
+    <string name="tags_private_section">Теги приватных видео</string>
+    <string name="tags_private_locked_title">Приватные теги защищены</string>
+    <string name="tags_private_locked_desc">Разблокируйте с помощью биометрии или пароля, чтобы просматривать, создавать и удалять приватные теги.</string>
+    <string name="tags_private_unlock">Разблокировать приватные теги</string>
+    <string name="tags_private_password_required">Установите пароль конфиденциальности, чтобы управлять приватными тегами</string>
+    <string name="tags_backup_section">Резервная копия тегов</string>
+    <string name="tags_backup_export">Экспортировать резервную копию</string>
+    <string name="tags_backup_export_desc">Сохранить ручную копию резервной копии в любую папку</string>
+    <string name="tags_backup_import">Импортировать резервную копию</string>
+    <string name="tags_backup_import_desc">Заменить все текущие теги автоматической копией с устройства</string>
+    <string name="tags_backup_auto_status">Автоматическая копия сохранена %1$s</string>
+    <string name="tags_backup_auto_status_empty">Автоматическая копия еще не сохранена</string>
+    <string name="tags_backup_export_success">Резервная копия успешно экспортирована</string>
+    <string name="tags_backup_import_success">Копия импортирована: заменено тегов — %1$d, восстановлено связей — %2$d</string>
+    <string name="tags_cleanup_section">Очистка тегов</string>
+    <string name="tags_cleanup_missing_action">Удалить связи с отсутствующими видео</string>
+    <string name="tags_cleanup_missing_desc">Проверяет пути всех видео с тегами и удаляет связи с файлами, которых больше нет</string>
+    <string name="tags_cleanup_missing_confirm_title">Очистить связи с отсутствующими видео?</string>
+    <string name="tags_cleanup_missing_confirm_message">Будут проверены все сохранённые пути. Удаляются только связи и записи видео, файлы которых отсутствуют; сами теги и существующие файлы сохраняются.</string>
+    <string name="tags_cleanup_missing_scanning">Проверка сохранённых видео…</string>
+    <string name="tags_cleanup_missing_progress">Проверено %1$d из %2$d путей</string>
+    <string name="tags_cleanup_missing_success">Проверка завершена: путей проверено — %1$d, удалено отсутствующих видео — %2$d, связей тегов — %3$d</string>
+    <string name="tags_cleanup_missing_none">Проверка завершена: проверено путей — %1$d, отсутствующих видео нет</string>
+    <string name="tags_cleanup_missing_failed">Не удалось проверить видео, связанные с тегами</string>
+    <string name="tags_backup_action_failed">Не удалось завершить операцию резервного копирования</string>
+    <string name="tags_create_hint">Создать новый тег</string>
+    <string name="tags_list_title">Список тегов</string>
+    <string name="tags_count">%1$d тегов</string>
+    <string name="tags_video_count">Связано видео: %1$d</string>
+    <string name="tags_empty_scope">В этой категории нет созданных тегов</string>
+    <string name="tags_delete">Удалить тег</string>
+    <string name="tags_delete_confirm_title">Удалить тег?</string>
+    <string name="tags_delete_confirm_message">Удалить "%1$s"? Тег будет удален из видео, где он используется.</string>
+
+    <!-- TopAppBar -->
+    <string name="settings_title">Настройки</string>
+    <string name="playback_title">Воспроизведение</string>
+    <string name="interface_title">Интерфейс</string>
+    <string name="about_title">О программе</string>
+    <string name="cancel_selection">Отменить выбор</string>
+    <string name="back">Назад</string>
+    <string name="select_all">Выбрать все</string>
+
+    <!-- Playback Settings Screen -->
+    <string name="playback_controls">Управление</string>
+    <string name="playback_features">Функции</string>
+
+    <string name="playback_background_playback">Фоновое воспроизведение</string>
+    <string name="playback_background_playback_desc">Продолжать воспроизведение при закрытии плеера</string>
+    <string name="playback_auto_pip">Автоматический режим «картинка в картинке»</string>
+    <string name="playback_auto_pip_desc">Открывать плавающий плеер при выходе из приложения во время видео</string>
+    <string name="playback_double_tap_seek">Поиск двойным касанием</string>
+    <string name="playback_double_tap_seek_desc">Секунд для перехода вперед/назад</string>
+    <string name="playback_drag_seek">Перемотка перетаскиванием</string>
+    <string name="playback_drag_seek_desc">Перетаскивайте горизонтально при скрытых элементах управления, чтобы перемещаться по видео</string>
+    <string name="playback_volume_brightness_gestures">Жесты громкости и яркости</string>
+    <string name="playback_volume_brightness_gestures_desc">Перетаскивайте вертикально по краям при скрытых элементах управления, чтобы менять громкость и яркость</string>
+    <string name="playback_keep_screen_on">Не выключать экран</string>
+    <string name="playback_keep_screen_on_desc">Не выключать экран во время воспроизведения</string>
+    <string name="playback_continue_watching">Продолжить просмотр</string>
+    <string name="playback_continue_watching_enabled">Включить продолжение просмотра</string>
+    <string name="playback_continue_watching_enabled_desc">Сохранять место остановки и позволять продолжить позже</string>
+    <string name="playback_continue_watching_min_duration">Минимальная длительность видео</string>
+    <string name="playback_continue_watching_min_duration_desc">Сохранять прогресс только для видео не короче этого времени</string>
+    <string name="playback_continue_watching_private">Включать приватные видео</string>
+    <string name="playback_continue_watching_private_desc">Также сохранять прогресс видео в приватных папках</string>
+    <string name="playback_continue_watching_stopped_at">Остановлено на %1$s</string>
+
+    <!-- Display Settings Screen -->
+    <string name="display_video_info">Информация о видео</string>
+    <string name="display_show_thumbnails">Показывать миниатюры</string>
+    <string name="display_show_thumbnails_desc">Отображать миниатюры видео</string>
+    <string name="display_show_durations">Показывать длительность</string>
+    <string name="display_show_durations_desc">Отображать длительность видео</string>
+    <string name="display_show_file_sizes">Показывать размеры файлов</string>
+    <string name="display_show_file_sizes_desc">Отображать размеры файлов</string>
+    <string name="display_layout">Макет</string>
+    <string name="display_grid_columns">Столбцы сетки</string>
+    <string name="display_grid_columns_desc">Количество столбцов в списке</string>
+    <string name="display_quality">Качество</string>
+    <string name="display_thumbnail_quality">Разрешение миниатюр</string>
+    <string name="display_thumbnail_quality_desc">Качество генерируемых миниатюр</string>
+
+    <!-- Quality Options -->
+    <string name="quality_low">Низкое (360p)</string>
+    <string name="quality_medium">Среднее (720p)</string>
+    <string name="quality_high">Высокое (1080p)</string>
+    <string name="quality_original">Оригинальное</string>
+
+    <!-- Files Settings Screen -->
+    <string name="files_management">Управление</string>
+    <string name="files_app_only_folders">Создать приватные папки</string>
+    <string name="files_app_only_folders_desc">Создавать приватные папки по умолчанию</string>
+    <string name="files_confirm_delete">Подтверждать удаление</string>
+    <string name="files_confirm_delete_desc">Запрашивать подтверждение перед удалением файлов</string>
+
+    <!-- Performance Settings Screen -->
+    <string name="performance_cache">Кэш</string>
+    <string name="performance_thumbnail_cache">Кэш миниатюр</string>
+    <string name="performance_thumbnail_cache_desc">Место, зарезервированное для миниатюр</string>
+
+    <!-- About Settings Screen -->
+    <string name="about_information">Информация</string>
+    <string name="about_app_version">Версия приложения</string>
+    <string name="about_source_code">Исходный код</string>
+    <string name="about_source_code_desc">Посмотреть на GitHub</string>
+    <string name="about_report_bug">Сообщить об ошибке</string>
+    <string name="about_report_bug_desc">Сообщить о проблемах или предложениях на GitHub; может потребоваться вход</string>
+
+    <!-- Dialogs -->
+    <!-- Rename Dialog -->
+    <string name="rename_files">Переименовать файлы</string>
+    <string name="renaming_files">Переименование файлов</string>
+    <string name="renaming_progress">Переименование файла %1$d из %2$d</string>
+    <string name="base_name">Базовое имя</string>
+    <string name="start_number">Начальный номер</string>
+    <string name="rename">Переименовать</string>
+
+    <!-- Create Folder Dialog -->
+    <string name="create_new_folder">Создать новую папку</string>
+    <string name="creating_folder">Создание папки...</string>
+    <string name="folder_name">Имя папки</string>
+    <string name="folder_name_empty_error">Имя папки не может быть пустым</string>
+    <string name="create">Создать</string>
+
+    <!-- Password Dialog -->
+    <string name="set_secure_password">Установить пароль защищенной папки</string>
+    <string name="enter_password">Введите пароль</string>
+    <string name="processing">Обработка...</string>
+    <string name="password">Пароль</string>
+    <string name="confirm_password">Подтвердите пароль</string>
+    <string name="password_empty_error">Пароль не может быть пустым</string>
+    <string name="passwords_no_match_error">Пароли не совпадают</string>
+    <string name="invalid_password_error">Неверный пароль</string>
+    <string name="set_password">Установить пароль</string>
+    <string name="verify">Проверить</string>
+
+    <!-- Delete Confirmation Dialog -->
+    <string name="confirm_deletion">Подтвердите удаление</string>
+    <string name="delete_confirmation_message">Вы уверены, что хотите удалить %d элемент(ов)? Это действие нельзя отменить.</string>
+    <string name="delete">Удалить</string>
+
+    <!-- Common -->
+    <string name="cancel">Отмена</string>
+    <string name="no_items_selected">Элементы не выбраны</string>
+
+    <!-- Sort Options -->
+    <string name="sort_name_asc">Имя А-Я</string>
+    <string name="sort_name_desc">Имя Я-А</string>
+    <string name="sort_date_newest">Новые</string>
+    <string name="sort_date_oldest">Старые</string>
+    <string name="sort_size_largest">Большие</string>
+    <string name="sort_size_smallest">Маленькие</string>
+
+    <!-- Player Delete Dialog -->
+    <string name="delete_video">Удалить видео</string>
+    <string name="delete_video_confirmation">Вы уверены, что хотите удалить \"%1$s\"?\n\nЭто действие нельзя отменить.</string>
+    <string name="delete_no_items_selected">Элементы не выбраны</string>
+    <string name="delete_item_not_found">Элемент не найден: %1$s</string>
+    <string name="delete_item_failed">Не удалось удалить %1$s</string>
+    <string name="delete_item_error">Ошибка при удалении %1$s: %2$s</string>
+    <string name="delete_no_items_deleted">Ни один элемент не был удалён</string>
+    <string name="delete_items_success">Удалено элементов: %1$d</string>
+    <string name="delete_secure_items_invalid_folder">Некоторые элементы находятся вне защищённой папки</string>
+    <string name="delete_secure_item_failed">Не удалось удалить защищённый элемент %1$s</string>
+    <string name="delete_secure_item_error">Ошибка при удалении защищённого элемента %1$s: %2$s</string>
+    <string name="delete_no_secure_items_deleted">Ни один защищённый элемент не был удалён</string>
+    <string name="delete_secure_items_success">Удалено защищённых элементов: %1$d</string>
+    <string name="delete_items_error_generic">Ошибка при удалении элементов</string>
+    <string name="video_delete_success">Видео успешно удалено</string>
+    <string name="video_delete_failed">Не удалось удалить видео</string>
+    <string name="video_delete_error">Ошибка при удалении видео: %1$s</string>
+
+    <!-- Player Speed Dialog -->
+    <string name="playback_speed_title">Скорость воспроизведения</string>
+    <string name="close">Закрыть</string>
+
+    <!-- Track Selection Dialog -->
+    <string name="tracks_title">Дорожки</string>
+    <string name="tab_subtitles">Субтитры</string>
+    <string name="tab_audio">Аудио</string>
+    <string name="subtitle_file_select">Выбрать файл субтитров</string>
+    <string name="subtitle_file_video_section">Субтитры в видео</string>
+    <string name="subtitle_size_title">Размер субтитров</string>
+    <string name="subtitle_size_small">Маленький</string>
+    <string name="subtitle_size_medium">Средний</string>
+    <string name="subtitle_size_large">Большой</string>
+    <string name="subtitles_off">Выкл</string>
+    <string name="no_tracks_available">Нет доступных дорожек</string>
+
+    <!-- Fix Video Metadata Dialog -->
+
+    <!-- ADICIONAR plurals corretos -->
+    <plurals name="items_selected">
+        <item quantity="one">Выбран %d элемент</item>
+        <item quantity="few">Выбрано %d элемента</item>
+        <item quantity="many">Выбрано %d элементов</item>
+        <item quantity="other">Выбрано %d элементов</item>
+    </plurals>
+
+    <!-- Plurals for item counting -->
+    <plurals name="move_items_count">
+        <item quantity="one">Переместить %d элемент</item>
+        <item quantity="few">Переместить %d элемента</item>
+        <item quantity="many">Переместить %d элементов</item>
+        <item quantity="other">Переместить %d элементов</item>
+    </plurals>
+
+    <plurals name="moving_items_status">
+        <item quantity="one">Перемещение %d элемента</item>
+        <item quantity="few">Перемещение %d элементов</item>
+        <item quantity="many">Перемещение %d элементов</item>
+        <item quantity="other">Перемещение %d элементов</item>
+    </plurals>
+
+    <plurals name="video_tags_selected_count">
+        <item quantity="one">Выбрано %d видео</item>
+        <item quantity="few">Выбрано %d видео</item>
+        <item quantity="many">Выбрано %d видео</item>
+        <item quantity="other">Выбрано %d видео</item>
+    </plurals>
+
+    <string name="private_folders_hint">Нажмите 3× на значок приложения вверху, чтобы показать/скрыть приватные папки</string>
+
+    <string name="video_not_found_title">Видео не найдено</string>
+    <string name="video_not_found_message">Видео "%1$s" не найдено. Обновите список видео, чтобы попробовать найти его снова.</string>
+    <string name="video_not_found_action_refresh">Обновить видео</string>
+    <string name="player_more_actions">Другие действия</string>
+    <string name="player_picture_in_picture">Картинка в картинке</string>
+    <string name="player_sleep_timer">Таймер сна</string>
+    <string name="player_sleep_timer_active_title">Таймер сна активен</string>
+    <string name="player_sleep_timer_active_content_description">Таймер сна активен</string>
+    <string name="player_sleep_timer_start">Запустить</string>
+    <string name="player_sleep_timer_cancel_prompt">Отменить таймер сна?</string>
+    <string name="player_sleep_timer_cancel_action">Отменить таймер</string>
+    <string name="player_sleep_timer_remaining">Осталось времени: %1$s</string>
+    <string name="player_sleep_timer_minutes_value">%1$d мин</string>
+    <string name="player_sleep_timer_hours_minutes_value">%1$dч %2$dмин</string>
+    <string name="player_sleep_timer_hours_value">%1$dч</string>
+    <string name="player_sleep_timer_only_minutes_value">%1$dмин</string>
+    <string name="player_back">Назад</string>
+    <string name="player_previous">Предыдущий</string>
+    <string name="player_pause">Пауза</string>
+    <string name="player_play">Воспроизвести</string>
+    <string name="player_next">Следующий</string>
+    <string name="player_subtitles">Субтитры</string>
+    <string name="player_rotation_video">Ориентация по видео</string>
+    <string name="player_rotation_sensor">Поворот по датчику устройства</string>
+    <string name="player_rotation_feedback_video">Экран следует ориентации видео</string>
+    <string name="player_rotation_feedback_sensor">Экран поворачивается вместе с устройством</string>
+    <string name="player_rotation_feedback_portrait">Экран закреплён в книжной ориентации</string>
+    <string name="player_rotation_feedback_landscape">Экран закреплён в альбомной ориентации</string>
+    <string name="player_rotation_portrait">Зафиксировать портретный режим</string>
+    <string name="player_rotation_landscape">Зафиксировать альбомный режим</string>
+    <string name="player_repeat_normal">Обычное воспроизведение</string>
+    <string name="player_repeat_all">Повторять плейлист</string>
+    <string name="player_repeat_one">Повторять один трек</string>
+    <string name="player_seek_forward">Перемотка вперед</string>
+    <string name="player_seek_backward">Перемотка назад</string>
+    <string name="player_audio_track_number">Аудио %1$d</string>
+    <string name="player_track_number">Дорожка %1$d</string>
+</resources>

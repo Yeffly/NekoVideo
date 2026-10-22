@@ -1,0 +1,412 @@
+package com.nkls.nekovideo.components.player
+
+import android.graphics.Bitmap
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.Player
+import com.nkls.nekovideo.R
+import com.nkls.nekovideo.MediaPlaybackService
+import com.nkls.nekovideo.components.OptimizedThumbnailManager
+import com.nkls.nekovideo.components.helpers.PlaylistManager
+import com.nkls.nekovideo.components.helpers.PlaylistNavigator
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.concurrent.TimeUnit
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MiniPlayerImproved(
+    onOpenPlayer: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
+    // Local player state
+    val mediaController by MediaControllerManager.mediaController.collectAsStateWithLifecycle()
+    var isPlaying by remember { mutableStateOf(false) }
+    var currentTitle by remember { mutableStateOf("") }
+    var currentUri by remember { mutableStateOf("") }
+    var thumbnail by remember { mutableStateOf<Bitmap?>(null) }
+    var currentPosition by remember { mutableStateOf(0L) }
+    var duration by remember { mutableStateOf(0L) }
+    var hasNext by remember { mutableStateOf(false) }
+    var hasPrevious by remember { mutableStateOf(false) }
+
+    val playButtonScale by animateFloatAsState(
+        targetValue = 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "playButtonScale"
+    )
+
+    val thumbnailScale by animateFloatAsState(
+        targetValue = if (isPlaying) 1f else 0.95f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "thumbnailScale"
+    )
+
+    // Local player connection
+    DisposableEffect(Unit) {
+        MediaControllerManager.connect(context)
+        onDispose { }
+    }
+
+    // Local player position ticker
+    LaunchedEffect(mediaController, isPlaying) {
+        while (isPlaying) {
+            mediaController?.let {
+                currentPosition = it.currentPosition
+                duration = it.duration.takeIf { d -> d > 0 } ?: 0L
+            }
+            delay(500)
+        }
+    }
+
+    // Local player listener
+    DisposableEffect(mediaController) {
+        if (mediaController == null) {
+            currentTitle = ""
+            currentUri = ""
+            thumbnail = null
+            currentPosition = 0L
+            duration = 0L
+            isPlaying = false
+            hasNext = false
+            hasPrevious = false
+            onDispose { }
+        }
+
+        else {
+            val controller = mediaController!!
+
+            val listener = object : Player.Listener {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    isPlaying = controller.isPlaying
+
+                    if (controller.mediaItemCount == 0 || controller.currentMediaItem == null) {
+                        currentTitle = ""
+                        currentUri = ""
+                        thumbnail = null
+                        currentPosition = 0L
+                        duration = 0L
+                        hasNext = false
+                        hasPrevious = false
+                    }
+                }
+
+                override fun onIsPlayingChanged(playing: Boolean) {
+                    isPlaying = playing
+                }
+
+                override fun onMediaItemTransition(
+                    mediaItem: androidx.media3.common.MediaItem?,
+                    reason: Int
+                ) {
+                    mediaItem?.let { item ->
+                        currentTitle = item.mediaMetadata.title?.toString()
+                            ?: File(item.localConfiguration?.uri?.path ?: "").nameWithoutExtension
+                        currentUri = item.localConfiguration?.uri?.toString() ?: ""
+                        hasNext = PlaylistManager.hasNext()
+                        hasPrevious = PlaylistManager.hasPrevious()
+                        currentPosition = controller.currentPosition
+                        duration = controller.duration.takeIf { it > 0 } ?: 0L
+
+                        if (currentUri.isNotEmpty()) {
+                            coroutineScope.launch {
+                                thumbnail = withContext(Dispatchers.IO) {
+                                    loadExistingThumbnail(context, currentUri)
+                                }
+                            }
+                        }
+                    } ?: run {
+                        currentTitle = ""
+                        currentUri = ""
+                        thumbnail = null
+                        currentPosition = 0L
+                        duration = 0L
+                        hasNext = false
+                        hasPrevious = false
+                    }
+                }
+            }
+
+            controller.addListener(listener)
+            isPlaying = controller.isPlaying
+            hasNext = PlaylistManager.hasNext()
+            hasPrevious = PlaylistManager.hasPrevious()
+            currentPosition = controller.currentPosition
+            duration = controller.duration.takeIf { it > 0 } ?: 0L
+
+            controller.currentMediaItem?.let { item ->
+                currentTitle = item.mediaMetadata.title?.toString()
+                    ?: File(item.localConfiguration?.uri?.path ?: "").nameWithoutExtension
+                currentUri = item.localConfiguration?.uri?.toString() ?: ""
+
+                if (currentUri.isNotEmpty()) {
+                    coroutineScope.launch {
+                        thumbnail = withContext(Dispatchers.IO) {
+                            loadExistingThumbnail(context, currentUri)
+                        }
+                    }
+                }
+            } ?: run {
+                currentTitle = ""
+                currentUri = ""
+                thumbnail = null
+                currentPosition = 0L
+                duration = 0L
+                hasNext = false
+                hasPrevious = false
+            }
+
+            onDispose {
+                controller.removeListener(listener)
+            }
+        }
+    }
+
+    fun closePlayer() {
+        // The local player holds its media item loaded; closing the mini player must
+        // clear the session so a stale playback cannot appear again.
+        PlaylistManager.clear()
+        MediaPlaybackService.stopService(context, persistContinueWatching = true)
+        currentTitle = ""
+        currentUri = ""
+        thumbnail = null
+        currentPosition = 0L
+        duration = 0L
+        isPlaying = false
+        hasNext = false
+        hasPrevious = false
+    }
+
+    val shouldShow = mediaController != null && currentTitle.isNotEmpty()
+
+    if (shouldShow) {
+        Card(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(80.dp)
+                .clickable { onOpenPlayer() },
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
+        ) {
+            Column {
+                // Progress bar
+                if (duration > 0) {
+                    val progress = (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(2.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Thumbnail
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .scale(thumbnailScale)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        thumbnail?.let { thumb ->
+                            if (!thumb.isRecycled) {
+                                Image(
+                                    bitmap = thumb.asImageBitmap(),
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                        }
+
+                        if (!isPlaying) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.4f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Pause,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    // Title + time
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = currentTitle,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Medium
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = if (duration > 0)
+                                "${formatTime(currentPosition)} / ${formatTime(duration)}"
+                            else "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    // Controls
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Previous
+                        IconButton(
+                            onClick = {
+                                PlaylistNavigator.previous(context)
+                            },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SkipPrevious,
+                                contentDescription = stringResource(R.string.player_previous),
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        // Play/Pause
+                        Surface(
+                            onClick = {
+                                mediaController?.let {
+                                    if (it.isPlaying) it.pause() else it.play()
+                                }
+                            },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .scale(playButtonScale),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                AnimatedContent(
+                                    targetState = isPlaying,
+                                    transitionSpec = {
+                                        fadeIn(animationSpec = tween(150)) togetherWith
+                                                fadeOut(animationSpec = tween(150))
+                                    },
+                                    label = "playPauseIcon"
+                                ) { playing ->
+                                    Icon(
+                                        imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                        contentDescription = if (playing) stringResource(R.string.player_pause) else stringResource(R.string.player_play),
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Next
+                        IconButton(
+                            onClick = {
+                                PlaylistNavigator.next(context)
+                            },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SkipNext,
+                                contentDescription = stringResource(R.string.player_next),
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        // Close
+                        IconButton(
+                            onClick = { closePlayer() },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = stringResource(R.string.close),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatTime(timeMs: Long): String {
+    if (timeMs <= 0) return "00:00"
+    val totalSeconds = TimeUnit.MILLISECONDS.toSeconds(timeMs)
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return String.format("%02d:%02d", minutes, seconds)
+}
+
+private suspend fun loadExistingThumbnail(context: android.content.Context, videoUri: String): Bitmap? =
+    withContext(Dispatchers.IO) {
+        try {
+            val cleanPath = videoUri.removePrefix("locked://").removePrefix("file://")
+            OptimizedThumbnailManager.getCachedThumbnail(cleanPath)
+                ?: OptimizedThumbnailManager.loadThumbnailFromDiskSync(context, videoUri)
+        } catch (e: Exception) {
+            null
+        }
+    }

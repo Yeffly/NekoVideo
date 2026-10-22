@@ -1,0 +1,639 @@
+package com.nkls.nekovideo.components.layout
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DriveFileMove
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
+import com.nkls.nekovideo.R
+import com.nkls.nekovideo.components.helpers.FilesManager
+
+enum class ActionType {
+    UNLOCK, SECURE, DELETE, RENAME, MOVE, SHUFFLE_PLAY, CREATE_FOLDER, SETTINGS, PASTE,
+    PRIVATIZE, UNPRIVATIZE, CANCEL_MOVE, SET_AS_SECURE_FOLDER, SHARE, TAGS,
+    PIN_FOLDER, UNPIN_FOLDER
+}
+
+data class ActionItem(
+    val type: ActionType,
+    val icon: ImageVector,
+    val title: String,
+    val subtitle: String? = null,
+    val isEnabled: Boolean = true
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ActionFAB(
+    hasSelectedItems: Boolean,
+    isMoveMode: Boolean,
+    isSecureMode: Boolean,
+    isRootDirectory: Boolean = false,
+    selectedItems: List<String> = emptyList(),
+    itemsToMoveCount: Int = 0,
+    isInsideLockedFolder: Boolean = false,
+    pinnedFolderPaths: Set<String> = emptySet(),
+    showShuffleLongPressHint: Boolean = false,
+    onShuffleLongPressHintShown: () -> Unit = {},
+    onFabOpened: () -> Unit = {},
+    onActionClick: (ActionType) -> Unit,
+    onActionLongClick: (ActionType) -> Unit = {}
+) {
+    var showBottomSheet by remember { mutableStateOf(false) }
+    val bottomSheetState = rememberModalBottomSheetState()
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+    val screenWidthPx = remember(configuration.screenWidthDp, density) {
+        with(density) { configuration.screenWidthDp.dp.toPx() }
+    }
+    var dragOffsetX by rememberSaveable { mutableFloatStateOf(0f) }
+    var fabGroupWidthPx by remember { mutableIntStateOf(0) }
+    val maxHorizontalDragPx = remember(screenWidthPx, fabGroupWidthPx) {
+        (screenWidthPx / 2f - fabGroupWidthPx).coerceAtLeast(0f)
+    }
+
+    val pasteHereText = stringResource(R.string.action_paste_here)
+    val cancelText = stringResource(R.string.action_cancel)
+    val cancelOperationText = stringResource(R.string.action_cancel_operation)
+    val protectText = stringResource(R.string.action_protect)
+    val unprivatizeText = stringResource(R.string.action_unlock_folder)
+    val privatizeText = stringResource(R.string.action_lock_folder)
+    val deleteText = stringResource(R.string.action_delete)
+    val renameText = stringResource(R.string.action_rename)
+    val moveText = stringResource(R.string.action_move)
+    val shufflePlayText = stringResource(R.string.action_shuffle_play)
+    val createFolderText = stringResource(R.string.action_create_folder)
+    val settingsText = stringResource(R.string.action_settings)
+    val secureFolderSet = stringResource(R.string.action_set_secure_folder)
+    val shareText = stringResource(R.string.action_share)
+    val tagsText = stringResource(R.string.action_tags)
+    val pinFolderText = stringResource(R.string.action_pin_folder)
+    val unpinFolderText = stringResource(R.string.action_unpin_folder)
+    val moveItemsText = pluralStringResource(R.plurals.move_items_count, itemsToMoveCount, itemsToMoveCount)
+
+    // NOVOS: strings que estavam hardcoded
+    val movingItemsText = pluralStringResource(R.plurals.moving_items_status, itemsToMoveCount, itemsToMoveCount)
+    val cancelDescription = stringResource(R.string.cancel_description)
+    val pasteHereDescription = stringResource(R.string.paste_here_description)
+    val actionsDescription = stringResource(R.string.actions_description)
+    val optionsDescription = stringResource(R.string.options_description)
+    val modeMoveFiles = stringResource(R.string.mode_move_files)
+    val itemActions = stringResource(R.string.item_actions)
+    val options = stringResource(R.string.options)
+    val navigateToDestination = stringResource(R.string.navigate_to_destination)
+
+    // Verifica se algum item selecionado é pasta trancada
+    val hasLockedFolders = remember(selectedItems) {
+        selectedItems.any { path ->
+            java.io.File(path, ".neko_locked").exists()
+        }
+    }
+
+    // Verifica se algum item selecionado é pasta normal (pode ser trancada)
+    val hasLockableFolders = remember(selectedItems) {
+        selectedItems.any { path ->
+            val file = java.io.File(path)
+            file.isDirectory && !java.io.File(path, ".neko_locked").exists()
+        }
+    }
+
+    val isSingleNomediaFolder = selectedItems.size == 1 &&
+            java.io.File(selectedItems.first()).let { file ->
+                file.isDirectory && file.name.startsWith(".")
+            }
+
+    val hasOnlyFiles = remember(selectedItems) {
+        selectedItems.isNotEmpty() && selectedItems.all { java.io.File(it).isFile }
+    }
+
+    val areAllSelectedItemsFolders = remember(selectedItems) {
+        selectedItems.isNotEmpty() && selectedItems.all { java.io.File(it).isDirectory }
+    }
+
+    val areAllSelectedFoldersPinned = remember(selectedItems, pinnedFolderPaths, areAllSelectedItemsFolders) {
+        areAllSelectedItemsFolders && selectedItems.all { path ->
+            pinnedFolderPaths.contains(java.io.File(path).absolutePath)
+        }
+    }
+
+    val areAllSelectedFoldersUnpinned = remember(selectedItems, pinnedFolderPaths, areAllSelectedItemsFolders) {
+        areAllSelectedItemsFolders && selectedItems.all { path ->
+            !pinnedFolderPaths.contains(java.io.File(path).absolutePath)
+        }
+    }
+
+    val hasNekoPrivateFolderSelected = remember(selectedItems) {
+        val nekoPrivatePath = java.io.File(FilesManager.SecureStorage.getNekoPrivateFolderPath()).absolutePath
+        selectedItems.any { path -> java.io.File(path).absolutePath == nekoPrivatePath }
+    }
+
+    val actions = remember(hasSelectedItems, isSecureMode, hasLockedFolders, hasLockableFolders, isMoveMode, moveItemsText, isRootDirectory, selectedItems, isInsideLockedFolder, hasOnlyFiles, tagsText, areAllSelectedItemsFolders, areAllSelectedFoldersPinned, areAllSelectedFoldersUnpinned, pinFolderText, unpinFolderText, hasNekoPrivateFolderSelected) {
+        when {
+            isMoveMode -> {
+                listOf(
+                    ActionItem(ActionType.PASTE, Icons.Default.ContentPaste, pasteHereText, moveItemsText),
+                    ActionItem(ActionType.CANCEL_MOVE, Icons.Default.Close, cancelText, cancelOperationText)
+                )
+            }
+            hasSelectedItems -> {
+                val actionsList = mutableListOf<ActionItem>()
+
+                actionsList.add(
+                    ActionItem(
+                        ActionType.SHUFFLE_PLAY,
+                        Icons.Default.Shuffle,
+                        shufflePlayText
+                    )
+                )
+
+                if (isInsideLockedFolder) {
+                    // Inside locked folder: delete, rename, move
+                    actionsList.addAll(listOf(
+                        ActionItem(ActionType.DELETE, Icons.Default.Delete, deleteText),
+                        ActionItem(ActionType.RENAME, Icons.Default.Edit, renameText),
+                        ActionItem(ActionType.MOVE, Icons.AutoMirrored.Filled.DriveFileMove, moveText)
+                    ))
+                    if (hasOnlyFiles) {
+                        actionsList.add(ActionItem(ActionType.SHARE, Icons.Default.Share, shareText))
+                        actionsList.add(ActionItem(ActionType.TAGS, Icons.Default.LocalOffer, tagsText))
+                    }
+                } else {
+                    if (areAllSelectedFoldersPinned && !hasNekoPrivateFolderSelected) {
+                        actionsList.add(
+                            ActionItem(
+                                type = ActionType.UNPIN_FOLDER,
+                                icon = Icons.Default.PushPin,
+                                title = unpinFolderText
+                            )
+                        )
+                    } else if (areAllSelectedFoldersUnpinned && !isRootDirectory && !hasNekoPrivateFolderSelected) {
+                        actionsList.add(
+                            ActionItem(
+                                type = ActionType.PIN_FOLDER,
+                                icon = Icons.Default.PushPin,
+                                title = pinFolderText
+                            )
+                        )
+                    }
+
+                    // All actions available in non-locked folders (even inside secure_videos)
+                    if (!isSecureMode && !hasNekoPrivateFolderSelected) {
+                        actionsList.add(ActionItem(ActionType.SECURE, Icons.Default.Lock, protectText))
+                    }
+
+                    // Lock/Unlock available in both secure and normal mode
+                    if (hasLockedFolders && !hasNekoPrivateFolderSelected) {
+                        actionsList.add(ActionItem(ActionType.UNPRIVATIZE, Icons.Default.LockOpen, unprivatizeText))
+                    }
+                    if (hasLockableFolders && !hasNekoPrivateFolderSelected) {
+                        actionsList.add(ActionItem(ActionType.PRIVATIZE, Icons.Default.Lock, privatizeText))
+                    }
+
+                    if (!hasNekoPrivateFolderSelected) {
+                        actionsList.add(ActionItem(ActionType.DELETE, Icons.Default.Delete, deleteText))
+                        actionsList.add(ActionItem(ActionType.RENAME, Icons.Default.Edit, renameText))
+                        actionsList.add(ActionItem(ActionType.MOVE, Icons.AutoMirrored.Filled.DriveFileMove, moveText))
+                    }
+
+                    if (hasOnlyFiles) {
+                        actionsList.add(ActionItem(ActionType.SHARE, Icons.Default.Share, shareText))
+                        actionsList.add(ActionItem(ActionType.TAGS, Icons.Default.LocalOffer, tagsText))
+                    }
+
+                    if (isSingleNomediaFolder) {
+                        actionsList.add(
+                            ActionItem(
+                                ActionType.SET_AS_SECURE_FOLDER,
+                                Icons.Default.FolderSpecial,
+                                secureFolderSet
+                            )
+                        )
+                    }
+                }
+
+                actionsList
+            }
+            else -> {
+                if (isInsideLockedFolder) {
+                    // Inside locked/encrypted folder: shuffle + create folder + settings
+                    buildList {
+                        add(ActionItem(
+                            ActionType.SHUFFLE_PLAY,
+                            Icons.Default.Shuffle,
+                            shufflePlayText
+                        ))
+                        add(ActionItem(ActionType.CREATE_FOLDER, Icons.Default.CreateNewFolder, createFolderText))
+                        add(ActionItem(ActionType.SETTINGS, Icons.Default.Settings, settingsText))
+                    }
+                } else {
+                    // Normal folder (including non-locked folders inside secure_videos)
+                    buildList {
+                        add(ActionItem(
+                            ActionType.SHUFFLE_PLAY,
+                            Icons.Default.Shuffle,
+                            shufflePlayText,
+                            isEnabled = !isRootDirectory
+                        ))
+                        add(ActionItem(ActionType.CREATE_FOLDER, Icons.Default.CreateNewFolder, createFolderText))
+                        add(ActionItem(ActionType.SETTINGS, Icons.Default.Settings, settingsText))
+                    }
+                }
+            }
+        }
+    }
+    Box(
+        modifier = Modifier
+            .onSizeChanged { fabGroupWidthPx = it.width }
+            .offset { IntOffset(dragOffsetX.roundToInt(), 0) }
+            .pointerInput(maxHorizontalDragPx) {
+                detectDragGestures(
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        dragOffsetX = (dragOffsetX + dragAmount.x).coerceIn(-maxHorizontalDragPx, 0f)
+                    }
+                )
+            },
+        contentAlignment = Alignment.CenterEnd
+    ) {
+        // NOVO: Layout para modo Move - FAB duplo
+        if (isMoveMode) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Indicador de status do Move
+                Surface(
+                    modifier = Modifier.padding(end = 4.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DriveFileMove,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = movingItemsText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    FloatingActionButton(
+                        onClick = { onActionClick(ActionType.CANCEL_MOVE) },
+                        modifier = Modifier.size(48.dp),
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = cancelDescription,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        FloatingActionButton(
+                            onClick = { onActionClick(ActionType.CREATE_FOLDER) },
+                            modifier = Modifier.size(48.dp),
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CreateNewFolder,
+                                contentDescription = createFolderText,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        FloatingActionButton(
+                            onClick = { onActionClick(ActionType.PASTE) },
+                            modifier = Modifier.size(56.dp),
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentPaste,
+                                contentDescription = pasteHereDescription,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            FloatingActionButton(
+                onClick = {
+                    onFabOpened()
+                    showBottomSheet = true
+                },
+                modifier = Modifier.size(56.dp),
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ) {
+                Icon(
+                    imageVector = if (hasSelectedItems) Icons.Default.MoreVert else Icons.Default.Settings,
+                    contentDescription = if (hasSelectedItems) actionsDescription else optionsDescription,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+    }
+
+    // Bottom Sheet Modal
+    if (showBottomSheet) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                showBottomSheet = false
+            },
+            sheetState = bottomSheetState,
+            dragHandle = {
+                Surface(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    shape = RoundedCornerShape(2.dp)
+                ) {
+                    Box(modifier = Modifier.size(width = 32.dp, height = 4.dp))
+                }
+            }
+        ) {
+            val density = LocalDensity.current
+            var isWide by remember { mutableStateOf(false) }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onSizeChanged { size ->
+                        isWide = with(density) { size.width.toDp() } > 600.dp
+                    }
+                    .padding(bottom = if (isWide) 8.dp else 16.dp)
+            ) {
+                // Header com contexto
+                Column(modifier = Modifier.padding(
+                    horizontal = 16.dp,
+                    vertical = if (isWide) 4.dp else 8.dp
+                )) {
+                    Text(
+                        text = when {
+                            isMoveMode -> modeMoveFiles
+                            hasSelectedItems -> itemActions
+                            else -> options
+                        },
+                        style = if (isWide) MaterialTheme.typography.titleMedium
+                               else MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    if (isMoveMode) {
+                        Text(
+                            text = navigateToDestination,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                Spacer(modifier = Modifier.height(if (isWide) 8.dp else 16.dp))
+
+                if (showShuffleLongPressHint) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.TouchApp,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = stringResource(R.string.shuffle_tags_hint_message),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                // Grid de ações - mais colunas em landscape
+                val gridCols = when {
+                    isMoveMode -> 2
+                    isWide -> 5
+                    else -> 3
+                }
+
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(gridCols),
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(if (isWide) 8.dp else 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(if (isWide) 8.dp else 12.dp)
+                ) {
+                    items(actions) { action ->
+                        ActionGridItem(
+                            action = action,
+                            isMoveMode = isMoveMode,
+                            isCompact = isWide,
+                            showHighlight = showShuffleLongPressHint && action.type == ActionType.SHUFFLE_PLAY,
+                            onClick = {
+                                onActionClick(action.type)
+                                showBottomSheet = false
+                            },
+                            onLongClick = {
+                                onActionLongClick(action.type)
+                                if (showShuffleLongPressHint && action.type == ActionType.SHUFFLE_PLAY) {
+                                    onShuffleLongPressHintShown()
+                                }
+                                showBottomSheet = false
+                            }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(if (isWide) 8.dp else 16.dp))
+            }
+        }
+    }
+
+}
+
+@Composable
+private fun ActionGridItem(
+    action: ActionItem,
+    isMoveMode: Boolean = false,
+    isCompact: Boolean = false,
+    showHighlight: Boolean = false,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {}
+) {
+    val itemHeight = when {
+        isCompact -> 76.dp
+        isMoveMode -> 110.dp
+        else -> 100.dp
+    }
+    val iconSurfaceSize = if (isCompact) 36.dp else 40.dp
+    val iconSize = if (isCompact) 18.dp else 20.dp
+    val highlightColor = MaterialTheme.colorScheme.primary
+    val highlightContainer = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.16f)
+    val outlineColor = if (showHighlight) highlightColor.copy(alpha = 0.45f) else Color.Transparent
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(itemHeight)
+            .combinedClickable(
+                enabled = action.isEnabled,
+                onClick = {
+                    if (action.isEnabled) onClick()
+                },
+                onLongClick = {
+                    if (action.isEnabled) onLongClick()
+                }
+            ),
+        color = if (showHighlight) highlightContainer else Color.Transparent,
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .border(width = 1.dp, color = outlineColor, shape = RoundedCornerShape(12.dp))
+                .padding(if (isCompact) 4.dp else 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                val isDestructive = action.type == ActionType.DELETE || action.type == ActionType.CANCEL_MOVE
+                val iconBg = when {
+                    !action.isEnabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+                    showHighlight -> highlightColor.copy(alpha = 0.16f)
+                    isDestructive -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.18f)
+                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)
+                }
+                val iconTint = when {
+                    !action.isEnabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f)
+                    showHighlight -> highlightColor
+                    isDestructive -> MaterialTheme.colorScheme.error
+                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                }
+
+                Surface(
+                    modifier = Modifier.size(iconSurfaceSize),
+                    shape = RoundedCornerShape(10.dp),
+                    color = iconBg
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = action.icon,
+                            contentDescription = action.title,
+                            tint = iconTint,
+                            modifier = Modifier.size(iconSize)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(if (isCompact) 4.dp else 8.dp))
+
+                Text(
+                    text = action.title,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = if (isCompact) 10.sp else 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        lineHeight = if (isCompact) 12.sp else 13.sp
+                    ),
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    color = if (action.isEnabled) {
+                        if (showHighlight) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        }
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                    }
+                )
+
+                // Subtitle para modo Move
+                action.subtitle?.let { subtitle ->
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 10.sp
+                        ),
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+            }
+        }
+    }
+}

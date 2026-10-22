@@ -1,0 +1,2054 @@
+package com.nkls.nekovideo.components.player
+
+import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
+import android.media.AudioManager
+import android.net.Uri
+import android.os.Bundle
+import android.os.Build
+import android.provider.Settings
+import android.util.Log
+import android.util.TypedValue
+import android.view.WindowManager
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.activity.ComponentActivity
+import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.media3.common.C
+import androidx.media3.common.Format
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
+import androidx.media3.common.VideoSize
+import androidx.media3.common.text.Cue
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionToken
+import androidx.media3.ui.PlayerView
+import androidx.media3.ui.SubtitleView
+import com.google.common.util.concurrent.MoreExecutors
+import com.nkls.nekovideo.MainActivity
+import com.nkls.nekovideo.MediaPlaybackService
+import com.nkls.nekovideo.components.AppBottomSheet
+import com.nkls.nekovideo.components.VideoTagsDialog
+import com.nkls.nekovideo.components.helpers.FilesManager
+import com.nkls.nekovideo.components.helpers.FolderLockManager
+import com.nkls.nekovideo.components.helpers.LockedPlaybackSession
+import com.nkls.nekovideo.components.helpers.PlaylistManager
+import com.nkls.nekovideo.components.helpers.PlaylistNavigator
+import com.nkls.nekovideo.components.helpers.TagEntity
+import com.nkls.nekovideo.components.helpers.TagScope
+import com.nkls.nekovideo.components.helpers.VideoTagStore
+import com.nkls.nekovideo.components.player.PlayerUtils.findActivity
+import com.nkls.nekovideo.components.settings.SettingsManager
+import com.nkls.nekovideo.services.FolderVideoScanner
+import android.widget.Toast
+import com.nkls.nekovideo.R
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.io.File
+import kotlin.math.abs
+import kotlin.math.roundToInt
+
+private const val BUFFERING_RECOVERY_TIMEOUT_MS = 15_000L
+private const val MAX_BUFFERING_RECOVERY_ATTEMPTS = 3
+private const val BUFFERING_UI_STALL_TIMEOUT_MS = 900L
+private const val BUFFERING_PROGRESS_EPSILON_MS = 200L
+private const val VERTICAL_GESTURE_FULL_RANGE_RATIO = 0.6f
+private const val MAX_VIDEO_ZOOM = 4f
+
+private data class PreferredTrack(
+    val label: String?,
+    val language: String?,
+    val mimeType: String?,
+    val selectionFlags: Int,
+    val roleFlags: Int
+)
+
+private fun Format.toPreferredTrack(): PreferredTrack {
+    return PreferredTrack(
+        label = label?.takeIf { it.isNotBlank() },
+        language = language?.takeIf { it.isNotBlank() },
+        mimeType = sampleMimeType?.takeIf { it.isNotBlank() },
+        selectionFlags = selectionFlags,
+        roleFlags = roleFlags
+    )
+}
+
+private fun subtitleSizeSp(level: Int): Float {
+    return when (level.coerceIn(0, 2)) {
+        0 -> 18f
+        2 -> 30f
+        else -> 24f
+    }
+}
+
+@androidx.annotation.OptIn(UnstableApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@SuppressLint("OpaqueUnitKey")
+@Composable
+fun VideoPlayerOverlay(
+    isVisible: Boolean,
+    canControlRotation: Boolean,
+    onDismiss: () -> Unit,
+    onManageTags: () -> Unit = {},
+    onVideoDeleted: (String) -> Unit = {},
+    selectedExternalSubtitleUri: Uri? = null,
+    selectedExternalSubtitleName: String? = null,
+    onExternalSubtitleCleared: () -> Unit = {},
+    onExternalSubtitleClick: () -> Unit = {}
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val activity = lifecycleOwner as? ComponentActivity
+    val dragSeekEnabled = SettingsManager.isDragSeekEnabled(context)
+    val volumeBrightnessGesturesEnabled = SettingsManager.areVolumeBrightnessGesturesEnabled(context)
+    var mediaController by remember { mutableStateOf<MediaController?>(null) }
+    var isFullscreen by remember { mutableStateOf(false) }
+    var hasRefreshed by remember { mutableStateOf(false) }
+    var overlayActuallyVisible by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var showVideoTagsDialog by remember { mutableStateOf(false) }
+    var shouldResumeAfterTagsDialog by remember { mutableStateOf(false) }
+    var shouldResumeAfterOverlayDialog by remember { mutableStateOf(false) }
+    var isSpeedDialogOpen by remember { mutableStateOf(false) }
+    var currentVideoPath by remember { mutableStateOf("") }
+    var currentVideoTagCount by remember { mutableIntStateOf(0) }
+    var availableTags by remember { mutableStateOf<List<TagEntity>>(emptyList()) }
+    var commonSelectedTagIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var availableTagsScope by remember { mutableStateOf<TagScope?>(null) }
+    val tagChangeEvent by VideoTagStore.tagChangeEvent.collectAsState()
+    LaunchedEffect(tagChangeEvent) {
+        availableTagsScope = null
+        availableTags = emptyList()
+    }
+    val rotationControlEnabled = canControlRotation
+
+    // ✅ Observar estado de PIP da MainActivity (usando State para reatividade)
+    val mainActivity = activity as? MainActivity
+    val isInPiPMode by mainActivity?.isInPiPModeState ?: remember { mutableStateOf(false) }
+
+    // Estados para controles customizados
+    var controlsVisible by remember { mutableStateOf(false) }
+    var hasLoadedVideo by remember { mutableStateOf(false) }
+    var isPlaying by remember { mutableStateOf(false) }
+    var currentPosition by remember { mutableStateOf(0L) }
+    var duration by remember { mutableStateOf(0L) }
+    var currentVideoTitle by remember { mutableStateOf("") }
+    var isSeekingActive by remember { mutableStateOf(false) }
+    var repeatMode by remember { mutableStateOf(RepeatMode.NONE) }
+    var playbackSpeed by remember { mutableStateOf(PlaybackSpeed.SPEED_1_00) }
+    var currentPlaybackState by remember { mutableStateOf(Player.STATE_IDLE) }
+    var bufferingRecoveryUri by remember { mutableStateOf<String?>(null) }
+    var bufferingRecoveryAttempts by remember { mutableIntStateOf(0) }
+    var showMissingVideoDialog by remember { mutableStateOf(false) }
+    var missingVideoTitle by remember { mutableStateOf("") }
+    var videoZoom by remember { mutableStateOf(1f) }
+    var videoOffsetX by remember { mutableStateOf(0f) }
+    var videoOffsetY by remember { mutableStateOf(0f) }
+    var lastPlaybackProgressAtMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    var lastPlaybackProgressPosition by remember { mutableStateOf(0L) }
+    var showBlockingBufferingUi by remember { mutableStateOf(false) }
+    var hasRenderedFirstFrame by remember { mutableStateOf(false) }
+    var sleepTimerActive by remember { mutableStateOf(false) }
+    var sleepTimerEndAtMs by remember { mutableStateOf(0L) }
+
+    //Controle de rotação
+    var rotationMode by remember { mutableStateOf(SettingsManager.getRotationMode(context)) }
+    var rotationFeedbackMode by rememberSaveable { mutableStateOf<RotationMode?>(null) }
+    var lastRotationFeedbackMode by rememberSaveable { mutableStateOf(rotationMode) }
+    var rotationFeedbackTarget by rememberSaveable { mutableIntStateOf(Configuration.ORIENTATION_UNDEFINED) }
+    var rotationFeedbackVisible by remember { mutableStateOf(false) }
+    val screenOrientation = LocalConfiguration.current.orientation
+    var lastValidOrientation by remember { mutableStateOf<Int?>(null) }
+    var lastKnownVideoSize by remember { mutableStateOf<VideoSize?>(null) }
+    var isWaitingForRotationGate by remember { mutableStateOf(false) }
+    var resumeAfterRotationGate by remember { mutableStateOf(false) }
+    var gatedMediaUri by remember { mutableStateOf<String?>(null) }
+    var pendingAutoPlayOnReady by remember { mutableStateOf(false) }
+
+    LaunchedEffect(rotationFeedbackMode, screenOrientation, isVisible) {
+        rotationFeedbackVisible = false
+        if (!isVisible) {
+            rotationFeedbackMode = null
+            return@LaunchedEffect
+        }
+        if (rotationFeedbackMode == null) return@LaunchedEffect
+
+        // Só inicia o tempo do aviso depois da troca de orientação, se houver.
+        if (rotationFeedbackTarget != Configuration.ORIENTATION_UNDEFINED &&
+            screenOrientation != rotationFeedbackTarget
+        ) {
+            delay(1500)
+        }
+        delay(150)
+        rotationFeedbackVisible = true
+        delay(2200)
+        rotationFeedbackVisible = false
+        rotationFeedbackMode = null
+    }
+
+
+    // Timer regressivo para UI (em segundos)
+    var uiTimer by remember { mutableStateOf(0) }
+
+    // Função para resetar timer da UI (definida no escopo correto com tipo explícito)
+    val resetUITimer: () -> Unit = {
+        uiTimer = 4
+    }
+
+    // Estados para controles de gestos
+    var seekIndicator by remember { mutableStateOf<String?>(null) }
+    var seekSide by remember { mutableStateOf(Alignment.Center) }
+    var volumeIndicator by remember { mutableStateOf<String?>(null) }
+    var brightnessIndicator by remember { mutableStateOf<String?>(null) }
+
+    val coroutineScope = rememberCoroutineScope()
+
+    var lastTapTime by remember { mutableStateOf(0L) }
+    var tapCount by remember { mutableStateOf(0) }
+    var accumulatedDoubleTapSeek by remember { mutableStateOf(0L) }
+    var lastDoubleTapSeekForward by remember { mutableStateOf<Boolean?>(null) }
+    val doubleTapTimeWindow = 400L // 400ms para detectar double tap e taps acumulados
+
+    fun resetVideoZoom() {
+        videoZoom = 1f
+        videoOffsetX = 0f
+        videoOffsetY = 0f
+    }
+
+    fun coerceVideoPan(width: Int, height: Int, zoom: Float) {
+        val maxOffsetX = width * (zoom - 1f) / 2f
+        val maxOffsetY = height * (zoom - 1f) / 2f
+        videoOffsetX = videoOffsetX.coerceIn(-maxOffsetX, maxOffsetX)
+        videoOffsetY = videoOffsetY.coerceIn(-maxOffsetY, maxOffsetY)
+    }
+
+    LaunchedEffect(currentVideoPath) {
+        resetVideoZoom()
+    }
+
+    // ✅ Esconder controles quando entrar no PIP
+    LaunchedEffect(isInPiPMode) {
+        if (isInPiPMode) {
+            controlsVisible = false
+        }
+    }
+
+    // ✅ Restaurar orientação padrão quando não pode controlar rotação
+    LaunchedEffect(rotationControlEnabled) {
+        if (!rotationControlEnabled) {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    //Legendas
+    var availableSubtitles by remember { mutableStateOf<List<Tracks.Group>>(emptyList()) }
+    var availableAudioTracks by remember { mutableStateOf<List<Tracks.Group>>(emptyList()) }
+    var selectedSubtitleTrack by remember { mutableStateOf<Int?>(null) }
+    var selectedAudioTrack by remember { mutableStateOf<Int?>(null) }
+    var preferredSubtitleTrack by remember { mutableStateOf<PreferredTrack?>(null) }
+    var preferredAudioTrack by remember { mutableStateOf<PreferredTrack?>(null) }
+    var subtitlesExplicitlyDisabled by remember { mutableStateOf(false) }
+    var showTrackSelectionDialog by remember { mutableStateOf(false) }
+    var isExternalSubtitleSelected by remember { mutableStateOf(false) }
+    var appliedExternalSubtitleUri by remember { mutableStateOf<String?>(null) }
+    var externalSubtitleVideoUri by remember { mutableStateOf<String?>(null) }
+    var subtitleSizeLevel by remember { mutableIntStateOf(1) }
+
+    // PlayerView sem controles nativos
+
+    val playerView = remember {
+        PlayerView(context).apply {
+            useController = false
+            setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+            resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+
+            subtitleView?.apply {
+                setViewType(SubtitleView.VIEW_TYPE_CANVAS)
+
+                setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, subtitleSizeSp(subtitleSizeLevel))
+
+                // Remove estilos e tamanhos embutidos para ter controle total
+                setApplyEmbeddedStyles(false)
+                setApplyEmbeddedFontSizes(false)
+
+                // Ajusta padding inferior (opcional)
+                setBottomPaddingFraction(0.08f)
+            }
+
+            // Ajuste leve da largura das cues sem sobrescrever o posicionamento padrão.
+            player?.addListener(object : Player.Listener {
+                override fun onCues(cues: MutableList<Cue>) {
+                    val adjustedCues = cues.map { cue ->
+                        cue.buildUpon()
+                            // Aumenta largura para 95% da tela
+                            .setSize(0.95f)
+                            .build()
+                    }
+                    subtitleView?.setCues(adjustedCues)
+                }
+            })
+        }
+    }
+
+    fun applyRotation(videoSize: VideoSize? = null) {
+        val localActivity = activity ?: return
+
+        // Se não pode controlar rotação, restaurar orientação padrão e sair
+        if (!rotationControlEnabled) {
+            localActivity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            return
+        }
+
+        val targetOrientation = when (rotationMode) {
+            RotationMode.SENSOR -> ActivityInfo.SCREEN_ORIENTATION_SENSOR
+            RotationMode.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            RotationMode.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            RotationMode.VIDEO -> {
+                if (videoSize != null && videoSize.width > 0 && videoSize.height > 0) {
+                    // VideoSize válido - calcular orientação
+                    if (videoSize.width > videoSize.height) {
+                        ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    } else {
+                        ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                    }
+                } else {
+                    // VideoSize inválido - manter última orientação conhecida
+                    lastValidOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                }
+            }
+        }
+
+        // Evita reaplicar a mesma orientação e disparar trabalho extra no Activity.
+        if (
+            targetOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED &&
+            localActivity.requestedOrientation != targetOrientation
+        ) {
+            lastValidOrientation = targetOrientation
+            localActivity.requestedOrientation = targetOrientation
+        }
+    }
+
+    fun applyRotationForCurrentMode(videoSize: VideoSize? = null) {
+        applyRotation(if (rotationMode == RotationMode.VIDEO) videoSize else null)
+    }
+
+    fun usableVideoSize(videoSize: VideoSize?): VideoSize? = videoSize?.takeIf {
+        it.width > 0 && it.height > 0
+    }
+
+    fun currentMediaUri(controller: MediaController): String? {
+        return controller.currentMediaItem?.localConfiguration?.uri?.toString()
+    }
+
+    fun resolveMediaFileFromUri(uriString: String): File? {
+        return when {
+            uriString.startsWith("locked://") -> File(uriString.removePrefix("locked://"))
+            uriString.startsWith("file://") -> File(uriString.removePrefix("file://"))
+            else -> Uri.parse(uriString).path?.let(::File)
+        }
+    }
+
+    fun mediaStillExists(uriString: String): Boolean {
+        return resolveMediaFileFromUri(uriString)?.exists() == true
+    }
+
+    fun showMissingVideoState(uriString: String) {
+        missingVideoTitle = currentVideoTitle.ifBlank {
+            resolveMediaFileFromUri(uriString)?.nameWithoutExtension ?: "desconhecido"
+        }
+        showMissingVideoDialog = true
+        shouldResumeAfterOverlayDialog = false
+        shouldResumeAfterTagsDialog = false
+        bufferingRecoveryAttempts = MAX_BUFFERING_RECOVERY_ATTEMPTS
+        mediaController?.pause()
+    }
+
+    fun closeOverlayForMissingVideo() {
+        showMissingVideoDialog = false
+        shouldResumeAfterOverlayDialog = false
+        shouldResumeAfterTagsDialog = false
+        mediaController?.pause()
+        mediaController?.clearMediaItems()
+        mediaController?.stop()
+        playerView.player = null
+        MediaControllerManager.disconnect()
+        MediaPlaybackService.stopService(context)
+        onDismiss()
+    }
+
+    fun refreshLibraryAfterMissingVideo() {
+        showMissingVideoDialog = false
+        shouldResumeAfterOverlayDialog = false
+        shouldResumeAfterTagsDialog = false
+        mediaController?.pause()
+        mediaController?.clearMediaItems()
+        mediaController?.stop()
+        playerView.player = null
+        MediaControllerManager.disconnect()
+        MediaPlaybackService.stopService(context)
+        FolderVideoScanner.startScan(context, forceRefresh = true)
+        onDismiss()
+    }
+
+    fun shouldGatePlaybackForRotation(controller: MediaController): Boolean {
+        return overlayActuallyVisible &&
+            rotationMode == RotationMode.VIDEO &&
+            rotationControlEnabled &&
+            currentMediaUri(controller) != null
+    }
+
+    fun finishRotationGateIfReady(controller: MediaController, videoSize: VideoSize? = controller.videoSize) {
+        if (!isWaitingForRotationGate) return
+
+        val mediaUri = currentMediaUri(controller)
+        if (mediaUri == null || mediaUri != gatedMediaUri) {
+            isWaitingForRotationGate = false
+            resumeAfterRotationGate = false
+            gatedMediaUri = null
+            return
+        }
+
+        if (videoSize == null || videoSize.width <= 0 || videoSize.height <= 0) {
+            return
+        }
+
+            applyRotation(videoSize)
+        val shouldResume = resumeAfterRotationGate
+        isWaitingForRotationGate = false
+        resumeAfterRotationGate = false
+        gatedMediaUri = null
+        pendingAutoPlayOnReady = false
+
+        coroutineScope.launch {
+            delay(120)
+            if (
+                shouldResume &&
+                mediaController === controller &&
+                currentMediaUri(controller) == mediaUri &&
+                !isSeekingActive &&
+                !showDeleteDialog &&
+                !showVideoTagsDialog &&
+                !showTrackSelectionDialog &&
+                !isSpeedDialogOpen
+            ) {
+                controller.play()
+            }
+        }
+    }
+
+    fun beginRotationGateIfNeeded(controller: MediaController) {
+        if (!shouldGatePlaybackForRotation(controller)) {
+            isWaitingForRotationGate = false
+            resumeAfterRotationGate = false
+            gatedMediaUri = null
+            applyRotationForCurrentMode(controller.videoSize)
+            return
+        }
+
+        val mediaUri = currentMediaUri(controller) ?: return
+        val videoSize = controller.videoSize
+        if (videoSize.width > 0 && videoSize.height > 0) {
+            isWaitingForRotationGate = false
+            resumeAfterRotationGate = false
+            gatedMediaUri = null
+            applyRotation(videoSize)
+            return
+        }
+
+        gatedMediaUri = mediaUri
+        isWaitingForRotationGate = true
+        resumeAfterRotationGate = controller.playWhenReady
+    }
+
+    fun selectSubtitleTrack(groupIndex: Int, trackIndex: Int) {
+        mediaController?.let { controller ->
+            val trackFormat = availableSubtitles[groupIndex].getTrackFormat(trackIndex)
+            val trackSelectionParameters = controller.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .setOverrideForType(
+                    TrackSelectionOverride(
+                        availableSubtitles[groupIndex].mediaTrackGroup,
+                        trackIndex
+                    )
+                )
+                .build()
+
+            controller.trackSelectionParameters = trackSelectionParameters
+            selectedSubtitleTrack = groupIndex
+            preferredSubtitleTrack = trackFormat.toPreferredTrack()
+            subtitlesExplicitlyDisabled = false
+            isExternalSubtitleSelected = false
+        }
+    }
+
+    fun disableSubtitles() {
+        mediaController?.let { controller ->
+            controller.trackSelectionParameters = controller.trackSelectionParameters
+                .buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                .build()
+            selectedSubtitleTrack = null
+            preferredSubtitleTrack = null
+            subtitlesExplicitlyDisabled = true
+            isExternalSubtitleSelected = false
+
+            if (selectedExternalSubtitleUri != null) {
+                controller.sendCustomCommand(
+                    SessionCommand(MediaPlaybackService.COMMAND_CLEAR_EXTERNAL_SUBTITLE, Bundle.EMPTY),
+                    Bundle.EMPTY
+                )
+
+                appliedExternalSubtitleUri = null
+                externalSubtitleVideoUri = null
+                onExternalSubtitleCleared()
+            }
+        }
+    }
+
+    fun subtitleMimeType(uri: Uri, displayName: String?): String? {
+        val source = (displayName ?: uri.lastPathSegment).orEmpty().lowercase()
+        return when {
+            source.endsWith(".srt") -> MimeTypes.APPLICATION_SUBRIP
+            source.endsWith(".vtt") -> MimeTypes.TEXT_VTT
+            source.endsWith(".ssa") || source.endsWith(".ass") -> MimeTypes.TEXT_SSA
+            else -> null
+        }
+    }
+
+    fun applyExternalSubtitle(controller: MediaController, subtitleUri: Uri, displayName: String?): Boolean {
+        val currentIndex = controller.currentMediaItemIndex
+        val currentItemUri = controller.currentMediaItem?.localConfiguration?.uri?.toString()
+        if (currentIndex == -1 || currentItemUri == null || controller.currentMediaItem == null) {
+            return false
+        }
+
+        val mimeType = subtitleMimeType(subtitleUri, displayName)
+        if (mimeType == null) {
+            return false
+        }
+
+        val args = Bundle().apply {
+            putString(MediaPlaybackService.EXTRA_SUBTITLE_URI, subtitleUri.toString())
+            putString(MediaPlaybackService.EXTRA_SUBTITLE_NAME, displayName)
+        }
+
+        controller.sendCustomCommand(
+            SessionCommand(MediaPlaybackService.COMMAND_APPLY_EXTERNAL_SUBTITLE, Bundle.EMPTY),
+            args
+        )
+
+        preferredSubtitleTrack = null
+        selectedSubtitleTrack = null
+        subtitlesExplicitlyDisabled = false
+        isExternalSubtitleSelected = true
+        appliedExternalSubtitleUri = subtitleUri.toString()
+        externalSubtitleVideoUri = currentItemUri
+        return true
+    }
+
+    fun hasExternalSubtitleApplied(controller: MediaController, subtitleUriString: String): Boolean {
+        return (
+            controller.currentMediaItem
+                ?.localConfiguration
+                ?.subtitleConfigurations
+                ?.any { it.uri.toString() == subtitleUriString }
+            ) == true
+    }
+
+    fun syncExternalSubtitleWithCurrentItem(controller: MediaController) {
+        val subtitleUri = selectedExternalSubtitleUri ?: return
+        val subtitleUriString = subtitleUri.toString()
+        val currentItemUri = controller.currentMediaItem?.localConfiguration?.uri?.toString()
+
+        if (currentItemUri == null) {
+            return
+        }
+
+        if (hasExternalSubtitleApplied(controller, subtitleUriString)) {
+            appliedExternalSubtitleUri = subtitleUriString
+            externalSubtitleVideoUri = currentItemUri
+            isExternalSubtitleSelected = !subtitlesExplicitlyDisabled
+            return
+        }
+
+        val applied = applyExternalSubtitle(controller, subtitleUri, selectedExternalSubtitleName)
+        if (!applied) {
+            appliedExternalSubtitleUri = null
+            externalSubtitleVideoUri = null
+            isExternalSubtitleSelected = false
+            onExternalSubtitleCleared()
+        }
+    }
+
+    fun clearExternalSubtitleSelectionForNewVideo(currentItemUri: String?) {
+        if (selectedExternalSubtitleUri == null) return
+        val previousVideoUri = externalSubtitleVideoUri ?: return
+        if (currentItemUri == null || currentItemUri == previousVideoUri) return
+
+        appliedExternalSubtitleUri = null
+        externalSubtitleVideoUri = null
+        isExternalSubtitleSelected = false
+        onExternalSubtitleCleared()
+    }
+
+    fun PreferredTrack.matches(format: Format): Boolean {
+        val normalizedLabel = label?.trim()?.lowercase()
+        val normalizedLanguage = language?.trim()?.lowercase()
+        val normalizedMimeType = mimeType?.trim()?.lowercase()
+
+        val formatLabel = format.label?.trim()?.lowercase()
+        val formatLanguage = format.language?.trim()?.lowercase()
+        val formatMimeType = format.sampleMimeType?.trim()?.lowercase()
+        val flagsMatch = selectionFlags == format.selectionFlags
+        val rolesMatch = roleFlags == format.roleFlags
+
+        val baseMatch = when {
+            normalizedLabel != null && normalizedLanguage != null -> {
+                formatLabel == normalizedLabel && formatLanguage == normalizedLanguage
+            }
+            normalizedLanguage != null && normalizedMimeType != null -> {
+                formatLanguage == normalizedLanguage && formatMimeType == normalizedMimeType
+            }
+            normalizedLanguage != null -> formatLanguage == normalizedLanguage
+            normalizedLabel != null -> formatLabel == normalizedLabel
+            normalizedMimeType != null -> formatMimeType == normalizedMimeType
+            else -> false
+        }
+
+        return baseMatch && flagsMatch && rolesMatch
+    }
+
+    fun findMatchingTrack(groups: List<Tracks.Group>, preferredTrack: PreferredTrack?): Pair<Int, Int>? {
+        if (preferredTrack == null) return null
+
+        groups.forEachIndexed { groupIndex, group ->
+            for (trackIndex in 0 until group.length) {
+                if (preferredTrack.matches(group.getTrackFormat(trackIndex))) {
+                    return groupIndex to trackIndex
+                }
+            }
+        }
+
+        return null
+    }
+
+    fun reapplyPreferredTracks(controller: MediaController) {
+        val subtitleMatch = findMatchingTrack(availableSubtitles, preferredSubtitleTrack)
+        if (subtitleMatch != null) {
+            val (groupIndex, trackIndex) = subtitleMatch
+            val updatedParams = controller.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .setOverrideForType(
+                    TrackSelectionOverride(
+                        availableSubtitles[groupIndex].mediaTrackGroup,
+                        trackIndex
+                    )
+                )
+                .build()
+            controller.trackSelectionParameters = updatedParams
+            selectedSubtitleTrack = groupIndex
+        } else if (preferredSubtitleTrack != null || subtitlesExplicitlyDisabled) {
+            controller.trackSelectionParameters = controller.trackSelectionParameters
+                .buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                .build()
+            selectedSubtitleTrack = null
+        }
+
+        val audioMatch = findMatchingTrack(availableAudioTracks, preferredAudioTrack)
+        if (audioMatch != null) {
+            val (groupIndex, trackIndex) = audioMatch
+            val updatedParams = controller.trackSelectionParameters
+                .buildUpon()
+                .setOverrideForType(
+                    TrackSelectionOverride(
+                        availableAudioTracks[groupIndex].mediaTrackGroup,
+                        trackIndex
+                    )
+                )
+                .build()
+            controller.trackSelectionParameters = updatedParams
+            selectedAudioTrack = groupIndex
+        } else if (preferredAudioTrack != null) {
+            selectedAudioTrack = null
+        }
+    }
+
+    fun checkAvailableTracks(controller: MediaController) {
+        val tracks = controller.currentTracks
+        val selectedExternalSubtitleUriString = selectedExternalSubtitleUri?.toString()
+        val hasCurrentExternalSubtitle = selectedExternalSubtitleUriString != null &&
+            hasExternalSubtitleApplied(controller, selectedExternalSubtitleUriString)
+        val subtitleGroups = mutableListOf<Tracks.Group>()
+        val audioGroups = mutableListOf<Tracks.Group>()
+        var detectedSubtitleTrack: PreferredTrack? = null
+        var detectedAudioTrack: PreferredTrack? = null
+        var detectedSubtitleGroupIndex: Int? = null
+        var detectedAudioGroupIndex: Int? = null
+
+
+        for (trackGroup in tracks.groups) {
+
+            if (trackGroup.type == C.TRACK_TYPE_TEXT) {
+                val groupIndex = subtitleGroups.size
+                subtitleGroups.add(trackGroup)
+                for (i in 0 until trackGroup.length) {
+                    if (trackGroup.isTrackSelected(i)) {
+                        detectedSubtitleTrack = trackGroup.getTrackFormat(i).toPreferredTrack()
+                        detectedSubtitleGroupIndex = groupIndex
+                    }
+                }
+            } else if (trackGroup.type == C.TRACK_TYPE_AUDIO) {
+                val groupIndex = audioGroups.size
+                audioGroups.add(trackGroup)
+                for (i in 0 until trackGroup.length) {
+                    if (trackGroup.isTrackSelected(i)) {
+                        detectedAudioTrack = trackGroup.getTrackFormat(i).toPreferredTrack()
+                        detectedAudioGroupIndex = groupIndex
+                    }
+                }
+            }
+        }
+
+        availableSubtitles = subtitleGroups
+        availableAudioTracks = audioGroups
+        subtitlesExplicitlyDisabled = controller.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
+        selectedSubtitleTrack = if (hasCurrentExternalSubtitle) null else detectedSubtitleGroupIndex
+        selectedAudioTrack = detectedAudioGroupIndex
+        if (hasCurrentExternalSubtitle && !subtitlesExplicitlyDisabled) {
+            isExternalSubtitleSelected = true
+        } else if (selectedSubtitleTrack != null) {
+            isExternalSubtitleSelected = false
+        } else if (selectedExternalSubtitleUri != null && !subtitlesExplicitlyDisabled) {
+            isExternalSubtitleSelected = true
+        }
+        if (detectedSubtitleTrack != null && !hasCurrentExternalSubtitle) {
+            preferredSubtitleTrack = detectedSubtitleTrack
+        }
+        if (detectedAudioTrack != null) {
+            preferredAudioTrack = detectedAudioTrack
+        }
+        reapplyPreferredTracks(controller)
+
+    }
+
+    fun setupController(controller: MediaController) {
+        mediaController = controller
+        playerView.player = controller
+        usableVideoSize(controller.videoSize)?.let { lastKnownVideoSize = it }
+        currentPlaybackState = controller.playbackState
+        hasLoadedVideo = controller.currentMediaItem != null
+        pendingAutoPlayOnReady = controller.playWhenReady && controller.playbackState != Player.STATE_READY
+        repeatMode = when (controller.repeatMode) {
+            Player.REPEAT_MODE_ALL -> RepeatMode.REPEAT_ALL
+            Player.REPEAT_MODE_ONE -> RepeatMode.REPEAT_ONE
+            else -> RepeatMode.NONE
+        }
+        controller.setPlaybackSpeed(playbackSpeed.value)
+
+        controller.currentMediaItem?.localConfiguration?.uri?.let { uri ->
+            val uriStr = uri.toString()
+            clearExternalSubtitleSelectionForNewVideo(uriStr)
+            if (uriStr.startsWith("locked://")) {
+                currentVideoPath = uriStr.removePrefix("locked://")
+                val obfuscatedName = File(currentVideoPath).name
+                currentVideoTitle = LockedPlaybackSession.getOriginalName(obfuscatedName)
+                    ?.substringBeforeLast(".") ?: obfuscatedName
+            } else {
+                currentVideoPath = uri.path?.removePrefix("file://") ?: ""
+                currentVideoTitle = File(currentVideoPath).nameWithoutExtension
+            }
+        }
+
+        checkAvailableTracks(controller)
+        syncExternalSubtitleWithCurrentItem(controller)
+
+    }
+
+    LaunchedEffect(Unit) {
+        subtitleSizeLevel = SettingsManager.getSubtitleSizeLevel(context)
+    }
+
+    LaunchedEffect(subtitleSizeLevel) {
+        playerView.subtitleView?.setFixedTextSize(
+            TypedValue.COMPLEX_UNIT_SP,
+            subtitleSizeSp(subtitleSizeLevel)
+        )
+    }
+
+    fun getTagScopeForPath(videoPath: String): TagScope {
+        val secureFolderPath = FilesManager.SecureStorage.getSecureFolderPath(context)
+        val nekoPrivatePath = FilesManager.SecureStorage.getNekoPrivateFolderPath()
+        return if (
+            videoPath.startsWith(secureFolderPath) ||
+            videoPath.startsWith(nekoPrivatePath) ||
+            videoPath.contains("/.private/") ||
+            videoPath.contains("/secure/") ||
+            videoPath.contains(".secure_videos") ||
+            videoPath.endsWith(".secure_videos") ||
+            File(videoPath).parent?.let { FolderLockManager.isLocked(it) } == true
+        ) {
+            TagScope.PRIVATE
+        } else {
+            TagScope.NORMAL
+        }
+    }
+
+    fun resumePlaybackAfterTagsDialog() {
+        if (shouldResumeAfterTagsDialog) {
+            mediaController?.play()
+            if (controlsVisible) {
+                resetUITimer()
+            }
+            shouldResumeAfterTagsDialog = false
+        }
+    }
+
+    LaunchedEffect(currentVideoPath, tagChangeEvent) {
+        val path = currentVideoPath
+        if (path.isBlank()) {
+            currentVideoTagCount = 0
+            return@LaunchedEffect
+        }
+
+        val scope = getTagScopeForPath(path)
+        currentVideoTagCount = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            VideoTagStore.getCommonTagIds(context, listOf(path), scope).size
+        }
+    }
+
+    fun pausePlaybackForOverlayDialog() {
+        shouldResumeAfterOverlayDialog = shouldResumeAfterOverlayDialog || mediaController?.isPlaying == true
+        if (shouldResumeAfterOverlayDialog) {
+            mediaController?.pause()
+        }
+    }
+
+    fun resumePlaybackAfterOverlayDialog() {
+        if (shouldResumeAfterOverlayDialog) {
+            mediaController?.play()
+            if (controlsVisible) {
+                resetUITimer()
+            }
+            shouldResumeAfterOverlayDialog = false
+        }
+    }
+
+    fun isPlaybackBlockedByDialog(): Boolean {
+        return showDeleteDialog ||
+            showVideoTagsDialog ||
+            showTrackSelectionDialog ||
+            isSpeedDialogOpen ||
+            showMissingVideoDialog
+    }
+
+    LaunchedEffect(mediaController, currentPlaybackState) {
+        val controller = mediaController ?: return@LaunchedEffect
+        val mediaUri = currentMediaUri(controller)
+
+        if (mediaUri != bufferingRecoveryUri) {
+            bufferingRecoveryUri = mediaUri
+            bufferingRecoveryAttempts = 0
+            showMissingVideoDialog = false
+            missingVideoTitle = ""
+            hasRenderedFirstFrame = false
+        }
+
+        if (currentPlaybackState == Player.STATE_READY) {
+            bufferingRecoveryAttempts = 0
+        }
+    }
+
+    LaunchedEffect(
+        mediaController,
+        currentPlaybackState,
+        currentPosition,
+        isSeekingActive,
+        overlayActuallyVisible,
+        showDeleteDialog,
+        showVideoTagsDialog,
+        showTrackSelectionDialog,
+        isSpeedDialogOpen,
+        showMissingVideoDialog,
+        isWaitingForRotationGate
+    ) {
+        val controller = mediaController ?: return@LaunchedEffect
+        val mediaUri = currentMediaUri(controller) ?: return@LaunchedEffect
+
+        val shouldWatchBuffering = overlayActuallyVisible &&
+            hasLoadedVideo &&
+            currentPlaybackState == Player.STATE_BUFFERING &&
+            controller.playWhenReady &&
+            !isSeekingActive &&
+            !isWaitingForRotationGate &&
+            !isPlaybackBlockedByDialog() &&
+            bufferingRecoveryAttempts < MAX_BUFFERING_RECOVERY_ATTEMPTS
+
+        if (!shouldWatchBuffering) {
+            return@LaunchedEffect
+        }
+
+        val startPosition = currentPosition
+        delay(BUFFERING_RECOVERY_TIMEOUT_MS)
+
+        if (mediaController !== controller) return@LaunchedEffect
+        if (currentMediaUri(controller) != mediaUri) return@LaunchedEffect
+        if (currentPlaybackState != Player.STATE_BUFFERING) return@LaunchedEffect
+        if (!controller.playWhenReady || isSeekingActive || isWaitingForRotationGate || isPlaybackBlockedByDialog()) return@LaunchedEffect
+        if (abs(currentPosition - startPosition) > 500L) return@LaunchedEffect
+
+        if (!mediaStillExists(mediaUri)) {
+            showMissingVideoState(mediaUri)
+            Log.w("VideoPlayer", "Arquivo nao encontrado durante buffering: $mediaUri")
+            return@LaunchedEffect
+        }
+
+        when (bufferingRecoveryAttempts) {
+            0 -> {
+                bufferingRecoveryAttempts = 1
+                Log.w("VideoPlayer", "Buffering preso detectado. Tentando recovery 1/3 (pause/play): $mediaUri")
+                controller.pause()
+                delay(150)
+                controller.play()
+            }
+
+            1 -> {
+                bufferingRecoveryAttempts = 2
+                Log.w("VideoPlayer", "Buffering preso detectado. Tentando recovery 2/3 (seek atual): $mediaUri")
+                controller.seekTo(controller.currentPosition.coerceAtLeast(0L))
+                controller.play()
+            }
+
+            2 -> {
+                bufferingRecoveryAttempts = 3
+                Log.w("VideoPlayer", "Buffering preso detectado. Tentando recovery 3/3 (refresh player): $mediaUri")
+                MediaPlaybackService.refreshPlayer(context)
+            }
+        }
+    }
+
+    if (showVideoTagsDialog && currentVideoPath.isNotEmpty()) {
+        VideoTagsDialog(
+            selectedVideoCount = 1,
+            tags = availableTags,
+            initialSelectedTagIds = commonSelectedTagIds,
+            onDismiss = {
+                showVideoTagsDialog = false
+                resumePlaybackAfterTagsDialog()
+            },
+            onManageTags = {
+                showVideoTagsDialog = false
+                shouldResumeAfterTagsDialog = false
+                availableTagsScope = null
+                onManageTags()
+            },
+            onSave = { selectedTagIds ->
+                val targetVideo = currentVideoPath
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    VideoTagStore.syncCommonTagsForVideos(
+                        context = context,
+                        videoPaths = listOf(targetVideo),
+                        initiallyCommonTagIds = commonSelectedTagIds,
+                        selectedTagIds = selectedTagIds
+                    )
+                }
+                commonSelectedTagIds = selectedTagIds
+                Toast.makeText(context, context.getString(R.string.video_tags_add_success), Toast.LENGTH_SHORT).show()
+                Result.success(Unit)
+            }
+        )
+    }
+
+    // ✅ RECEPTOR DE COMANDOS PIP
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                when (intent.getIntExtra("action", -1)) {
+                    PiPConstants.REQUEST_CODE_PLAY_PAUSE -> {
+                        mediaController?.let {
+                            if (it.isPlaying) it.pause() else it.play()
+                        }
+                    }
+                    PiPConstants.REQUEST_CODE_NEXT -> {
+                        // ✅ CENTRALIZADO: Usa PlaylistNavigator
+                        PlaylistNavigator.next(context)
+                    }
+                    PiPConstants.REQUEST_CODE_PREVIOUS -> {
+                        // ✅ CENTRALIZADO: Usa PlaylistNavigator
+                        PlaylistNavigator.previous(context)
+                    }
+                }
+            }
+        }
+
+        val filter = IntentFilter("PIP_CONTROL")
+        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+
+        onDispose {
+            context.unregisterReceiver(receiver)
+        }
+    }
+
+    // Efeito para atualizar posição do vídeo
+    LaunchedEffect(mediaController, isSeekingActive) {
+        if (mediaController != null && !isSeekingActive) {
+            while (overlayActuallyVisible) {
+                val playbackState = mediaController!!.playbackState
+                val newPosition = mediaController!!.currentPosition
+                val now = System.currentTimeMillis()
+
+                currentPlaybackState = playbackState
+                hasLoadedVideo = mediaController!!.currentMediaItem != null
+                currentPosition = newPosition
+                duration = mediaController!!.duration.takeIf { it > 0 } ?: 0L
+                isPlaying = mediaController!!.isPlaying
+
+                if (playbackState != Player.STATE_BUFFERING || isSeekingActive) {
+                    lastPlaybackProgressAtMs = now
+                    lastPlaybackProgressPosition = newPosition
+                    showBlockingBufferingUi = false
+                } else {
+                    if (newPosition > lastPlaybackProgressPosition + BUFFERING_PROGRESS_EPSILON_MS) {
+                        lastPlaybackProgressAtMs = now
+                        lastPlaybackProgressPosition = newPosition
+                        showBlockingBufferingUi = false
+                    } else {
+                        showBlockingBufferingUi = !hasRenderedFirstFrame && now - lastPlaybackProgressAtMs >= BUFFERING_UI_STALL_TIMEOUT_MS
+                    }
+                }
+
+                delay(100)
+            }
+        }
+    }
+
+    DisposableEffect(context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action != MediaPlaybackService.BROADCAST_SLEEP_TIMER_STATE_CHANGED) return
+
+                sleepTimerActive = intent.getBooleanExtra(MediaPlaybackService.EXTRA_SLEEP_TIMER_ACTIVE, false)
+                sleepTimerEndAtMs = intent.getLongExtra(MediaPlaybackService.EXTRA_SLEEP_TIMER_END_AT_MS, 0L)
+            }
+        }
+
+        val filter = IntentFilter(MediaPlaybackService.BROADCAST_SLEEP_TIMER_STATE_CHANGED)
+        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        MediaPlaybackService.requestSleepTimerState(context)
+
+        onDispose {
+            context.unregisterReceiver(receiver)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val savedSpeed = SettingsManager.getPlaybackSpeed(context)
+        playbackSpeed = PlaybackSpeed.entries.find { it.value == savedSpeed } ?: PlaybackSpeed.SPEED_1_00
+        mediaController?.setPlaybackSpeed(playbackSpeed.value)
+    }
+
+    LaunchedEffect(controlsVisible, isPlaying, isSeekingActive) {
+        if (controlsVisible && isPlaying) {
+            uiTimer = 4
+            while (uiTimer > 0 && controlsVisible && isPlaying) {
+                delay(1000)
+                if (!isSeekingActive) {
+                    uiTimer -= 1
+                }
+            }
+            if (uiTimer <= 0 && controlsVisible) {
+                controlsVisible = false
+            }
+        }
+    }
+
+    LaunchedEffect(controlsVisible) {
+        if (controlsVisible) {
+            uiTimer = 4 // Inicia com 4 segundos
+        } else if (isVisible) {
+            // Re-hide system bars whenever controls are dismissed
+            val window = activity?.window ?: return@LaunchedEffect
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            WindowCompat.getInsetsController(window, window.decorView).apply {
+                hide(WindowInsetsCompat.Type.systemBars())
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        }
+    }
+
+    // Esconder indicador de seek após tempo
+    LaunchedEffect(seekIndicator) {
+        if (seekIndicator != null) {
+            delay(500)
+            seekIndicator = null
+        }
+    }
+
+    LaunchedEffect(volumeIndicator) {
+        if (volumeIndicator != null) {
+            delay(500)
+            volumeIndicator = null
+        }
+    }
+
+    LaunchedEffect(brightnessIndicator) {
+        if (brightnessIndicator != null) {
+            delay(500)
+            brightnessIndicator = null
+        }
+    }
+
+    fun selectAudioTrack(groupIndex: Int, trackIndex: Int) {
+        mediaController?.let { controller ->
+            val trackFormat = availableAudioTracks[groupIndex].getTrackFormat(trackIndex)
+            val trackSelectionParameters = controller.trackSelectionParameters
+                .buildUpon()
+                .setOverrideForType(
+                    TrackSelectionOverride(
+                        availableAudioTracks[groupIndex].mediaTrackGroup,
+                        trackIndex
+                    )
+                )
+                .build()
+
+            controller.trackSelectionParameters = trackSelectionParameters
+            selectedAudioTrack = groupIndex
+            preferredAudioTrack = trackFormat.toPreferredTrack()
+        }
+    }
+
+    // Dialog de confirmação para deletar (movido para Dialogs.kt)
+    if (showDeleteDialog) {
+        com.nkls.nekovideo.components.DeleteVideoDialog(
+            videoPath = currentVideoPath,
+            onDismiss = {
+                showDeleteDialog = false
+                resumePlaybackAfterOverlayDialog()
+            },
+            onConfirm = {
+                showDeleteDialog = false
+                shouldResumeAfterOverlayDialog = false
+                coroutineScope.launch {
+                    deleteCurrentVideo(
+                        context = context,
+                        videoPath = currentVideoPath,
+                        mediaController = mediaController,
+                        onVideoDeleted = onVideoDeleted
+                    )
+                }
+            }
+        )
+    }
+
+    // Diálogo de seleção de legendas/áudio (movido para TrackSelectionDialog.kt)
+    if (showTrackSelectionDialog) {
+        TrackSelectionDialog(
+            availableSubtitles = availableSubtitles,
+            availableAudioTracks = availableAudioTracks,
+            selectedSubtitleTrack = selectedSubtitleTrack,
+            selectedAudioTrack = selectedAudioTrack,
+            selectedExternalSubtitleName = selectedExternalSubtitleName,
+            isExternalSubtitleSelected = isExternalSubtitleSelected,
+            subtitleSizeLevel = subtitleSizeLevel,
+            onSubtitleSelected = { groupIndex, trackIndex ->
+                selectSubtitleTrack(groupIndex, trackIndex)
+            },
+            onExternalSubtitleClick = onExternalSubtitleClick,
+            onSubtitleSizeLevelChanged = { newLevel ->
+                subtitleSizeLevel = newLevel
+                SettingsManager.setSubtitleSizeLevel(context, newLevel)
+            },
+            onSubtitlesDisabled = { disableSubtitles() },
+            onAudioSelected = { groupIndex, trackIndex ->
+                selectAudioTrack(groupIndex, trackIndex)
+            },
+            onDismiss = {
+                showTrackSelectionDialog = false
+                resumePlaybackAfterOverlayDialog()
+            },
+            onOpen = {
+                pausePlaybackForOverlayDialog()
+                resetUITimer()
+            },
+            onClose = {
+                resumePlaybackAfterOverlayDialog()
+            }
+        )
+    }
+
+    if (showMissingVideoDialog) {
+        val missingVideoSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+        AppBottomSheet(
+            onDismissRequest = { },
+            sheetState = missingVideoSheetState,
+            title = stringResource(R.string.video_not_found_title)
+        ) {
+            Text(
+                text = stringResource(R.string.video_not_found_message, missingVideoTitle)
+            )
+            TextButton(
+                onClick = { refreshLibraryAfterMissingVideo() },
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text(text = stringResource(R.string.video_not_found_action_refresh))
+            }
+        }
+    }
+
+    LaunchedEffect(mediaController, selectedExternalSubtitleUri, selectedExternalSubtitleName) {
+        val controller = mediaController ?: return@LaunchedEffect
+        syncExternalSubtitleWithCurrentItem(controller)
+    }
+
+    // Controlar overlay (mesmo código)
+    LaunchedEffect(isVisible) {
+        if (isVisible && !hasRefreshed) {
+            hasRefreshed = true
+            overlayActuallyVisible = true
+
+            // Primeiro, tenta conectar ao MediaController existente
+            val sessionToken = SessionToken(context, ComponentName(context, MediaPlaybackService::class.java))
+            val controllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
+
+            controllerFuture.addListener({
+                try {
+                    val newController = controllerFuture.get()
+
+                    // Verifica se o controller está funcionando e tem mídia
+                    val needsRefresh = when {
+                        newController.mediaItemCount == 0 -> {
+                            true
+                        }
+                        newController.playbackState == Player.STATE_IDLE -> {
+                            true
+                        }
+                        else -> {
+                            false
+                        }
+                    }
+
+                    if (needsRefresh) {
+                        // Só faz refresh se realmente precisar
+                        MediaPlaybackService.refreshPlayer(context)
+
+                        // Usa corrotina para o delay e reconexão
+                        coroutineScope.launch {
+                            delay(800)
+
+                            // Reconecta após o refresh
+                            val refreshedControllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
+                            refreshedControllerFuture.addListener({
+                                try {
+                                    val refreshedController = refreshedControllerFuture.get()
+                                    setupController(refreshedController)
+                                } catch (e: Exception) {
+                                    Log.e("VideoPlayer", "Erro ao conectar controller após refresh", e)
+                                }
+                            }, MoreExecutors.directExecutor())
+                        }
+                    } else {
+                        // Player está funcionando, só conecta normalmente
+                        setupController(newController)
+                    }
+
+                } catch (e: Exception) {
+                    Log.e("VideoPlayer", "Erro ao conectar controller inicial", e)
+                }
+            }, MoreExecutors.directExecutor())
+
+        } else if (!isVisible) {
+            playerView.player = null
+            hasRefreshed = false
+            overlayActuallyVisible = false
+            isWaitingForRotationGate = false
+            resumeAfterRotationGate = false
+            gatedMediaUri = null
+            hasLoadedVideo = false
+            hasRenderedFirstFrame = false
+            controlsVisible = false
+        }
+    }
+
+    // Listener para mudanças com melhorias de UX
+    DisposableEffect(mediaController, overlayActuallyVisible, repeatMode) {
+        var listener: Player.Listener? = null
+        val controller = mediaController
+
+        if (overlayActuallyVisible && controller != null) {
+            listener = object : Player.Listener {
+                override fun onVideoSizeChanged(videoSize: VideoSize) {
+                    if (!overlayActuallyVisible) return
+                    usableVideoSize(videoSize)?.let { lastKnownVideoSize = it }
+                    if (isWaitingForRotationGate) {
+                        finishRotationGateIfReady(controller, videoSize)
+                    } else if (rotationMode == RotationMode.VIDEO) {
+                        applyRotation(videoSize)
+                    }
+                }
+
+                override fun onRenderedFirstFrame() {
+                    hasRenderedFirstFrame = true
+                    showBlockingBufferingUi = false
+                }
+
+                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                    if (!overlayActuallyVisible) return
+
+                    val wasControlsVisible = controlsVisible
+                    currentPlaybackState = controller.playbackState
+                    hasLoadedVideo = controller.currentMediaItem != null
+
+                    mediaItem?.localConfiguration?.uri?.let { uri ->
+                        val uriStr = uri.toString()
+                        val isDifferentMedia = uriStr != bufferingRecoveryUri
+
+                        if (isDifferentMedia) {
+                            hasRenderedFirstFrame = false
+                            showBlockingBufferingUi = false
+                        }
+
+                        pendingAutoPlayOnReady = controller.playWhenReady
+                        if (uriStr.startsWith("locked://")) {
+                            currentVideoPath = uriStr.removePrefix("locked://")
+                            val obfuscatedName = File(currentVideoPath).name
+                            currentVideoTitle = LockedPlaybackSession.getOriginalName(obfuscatedName)
+                                ?.substringBeforeLast(".") ?: obfuscatedName
+                        } else {
+                            currentVideoPath = uri.path?.removePrefix("file://") ?: ""
+                            currentVideoTitle = File(currentVideoPath).nameWithoutExtension
+                        }
+                    }
+
+                    beginRotationGateIfNeeded(controller)
+
+                    controlsVisible = wasControlsVisible
+
+                    if (wasControlsVisible) {
+                        resetUITimer()
+                    }
+
+                    if (isPlaybackBlockedByDialog() && controller.isPlaying) {
+                        controller.pause()
+                    }
+
+                    controller.setPlaybackSpeed(playbackSpeed.value)
+
+                    // ✅ REMOVIDO: A atualização de window agora é centralizada no MediaPlaybackService
+                    // Isso evita duplicação de chamadas e dessincronização
+                }
+
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    currentPlaybackState = playbackState
+                    if (playbackState == Player.STATE_READY) {
+                        hasLoadedVideo = controller.currentMediaItem != null
+                        finishRotationGateIfReady(controller)
+                        if (pendingAutoPlayOnReady && !isWaitingForRotationGate && !isPlaybackBlockedByDialog()) {
+                            pendingAutoPlayOnReady = false
+                            if (!isSeekingActive) controller.play()
+                        }
+                        if (isPlaybackBlockedByDialog() && controller.isPlaying) {
+                            controller.pause()
+                        }
+                    } else if (playbackState == Player.STATE_IDLE) {
+                        hasLoadedVideo = controller.currentMediaItem != null
+                    }
+
+                    // ✅ SIMPLIFICADO: A navegação automática é feita pelo MediaPlaybackService
+                    // Aqui apenas tratamos o REPEAT_ONE (que precisa de seekTo local)
+                    if (playbackState == Player.STATE_ENDED) {
+                        when (repeatMode) {
+                            RepeatMode.REPEAT_ONE -> {
+                                // Apenas REPEAT_ONE precisa de tratamento local
+                                controller.seekTo(0)
+                                controller.play()
+                            }
+                            else -> {
+                                // REPEAT_ALL e NONE são tratados pelo MediaPlaybackService
+                                // O onMediaItemTransition vai atualizar os estados quando o vídeo mudar
+                            }
+                        }
+                    }
+                }
+
+                override fun onIsPlayingChanged(isPlayingNow: Boolean) {
+                    isPlaying = isPlayingNow
+                }
+
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    val mediaUri = currentMediaUri(controller) ?: return
+                    Log.e("VideoPlayer", "Playback error no overlay: ${error.message}", error)
+
+                    if (!mediaStillExists(mediaUri)) {
+                        Log.w("VideoPlayer", "Arquivo ausente detectado via onPlayerError: $mediaUri")
+                        showMissingVideoState(mediaUri)
+                    }
+                }
+
+                // ADICIONE AQUI DENTRO:
+                override fun onTracksChanged(tracks: Tracks) {
+                    checkAvailableTracks(controller)
+                }
+            }
+
+            controller.addListener(listener)
+
+            // Apply rotation immediately — onVideoSizeChanged may have fired before
+            // this listener was registered (race between recomposition and ExoPlayer decode)
+            beginRotationGateIfNeeded(controller)
+        }
+
+        onDispose {
+            listener?.let {
+                controller?.removeListener(it)
+            }
+        }
+    }
+
+    // Controle de modo imersivo (mesmo código)
+    DisposableEffect(isVisible) {
+        if (isVisible) {
+            val localActivity = activity ?: return@DisposableEffect onDispose {}
+            val window = localActivity.window
+            val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            insetsController.apply {
+                hide(WindowInsetsCompat.Type.systemBars())
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+            isFullscreen = true
+
+            onDispose {
+                WindowCompat.setDecorFitsSystemWindows(window, true)
+                insetsController.show(WindowInsetsCompat.Type.systemBars())
+                // Restaurar orientação padrão ao voltar para o FolderScreen
+                localActivity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                isFullscreen = false
+            }
+        } else {
+            onDispose { }
+        }
+    }
+
+    DisposableEffect(isVisible, isPlaying) {
+        val window = activity?.window
+
+        if (window != null) {
+            if (isVisible && isPlaying) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            } else {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+        }
+
+        onDispose {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    // Reaplicar flags quando o app volta do background
+    DisposableEffect(lifecycleOwner, isVisible, isPlaying) {
+        Log.d("BackDebug", "🎬 VideoPlayerOverlay - DisposableEffect montado, isVisible: $isVisible")
+
+        val observer = LifecycleEventObserver { _, event ->
+            Log.d("BackDebug", "🎬 VideoPlayerOverlay - Lifecycle event: $event, isVisible: $isVisible")
+
+            if (event == Lifecycle.Event.ON_RESUME && isVisible) {
+                Log.d("BackDebug", "🎬 VideoPlayerOverlay - ON_RESUME com overlay visível, reaplicando flags")
+                val window = activity?.window ?: return@LifecycleEventObserver
+                val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+
+                // Reaplicar modo imersivo
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+                insetsController.apply {
+                    hide(WindowInsetsCompat.Type.systemBars())
+                    systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
+
+                if (isPlaying) {
+                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                } else {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            Log.d("BackDebug", "🎬 VideoPlayerOverlay - DisposableEffect desmontado")
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    // Back press é gerenciado pelo MainScreen para evitar conflitos
+
+    // Overlay animado com gestos SIMPLIFICADOS (só double tap para seek)
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
+        exit = fadeOut() + slideOutVertically(targetOffsetY = { it })
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .pointerInput(hasLoadedVideo, currentPlaybackState, dragSeekEnabled, volumeBrightnessGesturesEnabled) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = true)
+                            val downTime = System.currentTimeMillis()
+                            val downX = down.position.x
+                            val downY = down.position.y
+                            val screenWidth = size.width.toFloat()
+                            val screenHeight = size.height.toFloat()
+
+                            val edgeMargin = size.width * 0.05f
+                            val isNearEdge = down.position.x < edgeMargin || down.position.x > size.width - edgeMargin || down.position.y > size.height - 100.dp.toPx()
+
+                            var gestureChange = down
+                            var initialDragX = 0f
+                            var initialDragY = 0f
+                            var startedTransformGesture = false
+
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val pressedChanges = event.changes.filter { it.pressed }
+
+                                if (pressedChanges.size > 1) {
+                                    startedTransformGesture = true
+                                    event.changes.forEach { it.consume() }
+                                    break
+                                }
+
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: event.changes.firstOrNull()
+                                if (change == null || !change.pressed) {
+                                    break
+                                }
+
+                                val dragX = change.position.x - downX
+                                val dragY = change.position.y - downY
+                                if (abs(dragX) > viewConfiguration.touchSlop || abs(dragY) > viewConfiguration.touchSlop) {
+                                    gestureChange = change
+                                    initialDragX = dragX
+                                    initialDragY = dragY
+                                    if (!isNearEdge) change.consume()
+                                    break
+                                }
+                            }
+
+                            if (startedTransformGesture) {
+                                controlsVisible = false
+                                tapCount = 0
+
+                                do {
+                                    val event = awaitPointerEvent()
+                                    val zoomChange = event.calculateZoom()
+                                    val panChange = event.calculatePan()
+                                    val nextZoom = (videoZoom * zoomChange).coerceIn(1f, MAX_VIDEO_ZOOM)
+
+                                    videoZoom = nextZoom
+                                    if (nextZoom <= 1.01f) {
+                                        resetVideoZoom()
+                                    } else {
+                                        videoOffsetX += panChange.x
+                                        videoOffsetY += panChange.y
+                                        coerceVideoPan(size.width, size.height, nextZoom)
+                                    }
+
+                                    event.changes.forEach { it.consume() }
+                                } while (event.changes.any { it.pressed })
+                            } else if (gestureChange != down) {
+                                if (!isNearEdge && !controlsVisible) {
+                                    if (videoZoom > 1f) {
+                                        var totalPanX = initialDragX
+                                        var totalPanY = initialDragY
+                                        var lastPanX = 0f
+                                        var lastPanY = 0f
+
+                                        do {
+                                            videoOffsetX += totalPanX - lastPanX
+                                            videoOffsetY += totalPanY - lastPanY
+                                            coerceVideoPan(size.width, size.height, videoZoom)
+                                            lastPanX = totalPanX
+                                            lastPanY = totalPanY
+
+                                            val event = awaitPointerEvent()
+                                            val change = event.changes.firstOrNull() ?: break
+                                            totalPanX = change.position.x - downX
+                                            totalPanY = change.position.y - downY
+                                            change.consume()
+                                        } while (change.pressed)
+                                    } else {
+                                        val initialPosition = mediaController?.currentPosition ?: 0L
+                                        val videoDuration = mediaController?.duration?.takeIf { it > 0 } ?: 0L
+                                        val seekSensitivity = screenWidth / 30f
+                                        val isHorizontalGesture = abs(initialDragX) >= abs(initialDragY)
+
+                                        if (isHorizontalGesture && dragSeekEnabled) {
+                                        var totalDragX = initialDragX
+                                        var lastSeekSeconds = 0
+
+                                        do {
+                                            val seekSeconds = (totalDragX / seekSensitivity).toInt()
+
+                                            if (seekSeconds != lastSeekSeconds) {
+                                                lastSeekSeconds = seekSeconds
+                                                seekIndicator = if (seekSeconds > 0) "+${seekSeconds}s" else "${seekSeconds}s"
+                                                seekSide = if (seekSeconds > 0) Alignment.CenterEnd else Alignment.CenterStart
+                                            }
+
+                                            val event = awaitPointerEvent()
+                                            val change = event.changes.firstOrNull() ?: break
+                                            totalDragX = change.position.x - downX
+                                            change.consume()
+                                        } while (change.pressed)
+
+                                        val finalSeekSeconds = (totalDragX / seekSensitivity).toInt()
+
+                                        if (finalSeekSeconds != 0 && duration > 0) {
+                                            mediaController?.let { controller ->
+                                                val newPosition = (initialPosition + finalSeekSeconds * 1000L)
+                                                    .coerceIn(0, videoDuration)
+                                                controller.seekTo(newPosition)
+                                            }
+                                        }
+                                        } else if (!isHorizontalGesture && volumeBrightnessGesturesEnabled) {
+                                        val isBrightnessGesture = downX < screenWidth / 2f
+                                        val gestureRange = screenHeight * VERTICAL_GESTURE_FULL_RANGE_RATIO
+                                        val window = activity?.window
+                                        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                                        val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                                        val initialVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                                        val initialBrightness = window?.attributes?.screenBrightness
+                                            ?.takeIf { it >= 0f }
+                                            ?: (runCatching {
+                                                Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS) / 255f
+                                            }.getOrDefault(0.5f))
+
+                                        var totalDragY = initialDragY
+
+                                        do {
+                                            val delta = (-totalDragY / gestureRange).coerceIn(-1f, 1f)
+
+                                            if (isBrightnessGesture) {
+                                                val newBrightness = (initialBrightness + delta).coerceIn(0.01f, 1f)
+                                                window?.attributes = window?.attributes?.apply {
+                                                    screenBrightness = newBrightness
+                                                }
+                                                brightnessIndicator = "${(newBrightness * 100).roundToInt()}%"
+                                            } else {
+                                                val newVolume = (initialVolume + delta * maxVolume)
+                                                    .roundToInt()
+                                                    .coerceIn(0, maxVolume)
+                                                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newVolume, 0)
+                                                volumeIndicator = "${(newVolume * 100f / maxVolume).roundToInt()}%"
+                                            }
+
+                                            val event = awaitPointerEvent()
+                                            val change = event.changes.firstOrNull() ?: break
+                                            totalDragY = change.position.y - downY
+                                            change.consume()
+                                        } while (change.pressed)
+
+                                        if (isBrightnessGesture) {
+                                            volumeIndicator = null
+                                        } else {
+                                            brightnessIndicator = null
+                                        }
+                                        } else {
+                                        do {
+                                            val event = awaitPointerEvent()
+                                            val change = event.changes.firstOrNull() ?: break
+                                            change.consume()
+                                        } while (change.pressed)
+                                        }
+                                    }
+                                }
+                            } else {
+                                val currentTime = System.currentTimeMillis()
+                                val isContinuingTapSequence = tapCount > 0 &&
+                                    (currentTime - lastTapTime) <= doubleTapTimeWindow
+                                tapCount = if (isContinuingTapSequence) tapCount + 1 else 1
+                                lastTapTime = currentTime
+
+                                if (tapCount == 1) {
+                                    accumulatedDoubleTapSeek = 0L
+                                    lastDoubleTapSeekForward = null
+
+                                    // Toggle da UI imediatamente (sem delay!)
+                                    controlsVisible = !controlsVisible
+                                    if (controlsVisible) {
+                                        resetUITimer()
+                                    }
+                                } else {
+                                    // Esconde a UI imediatamente
+                                    controlsVisible = false
+
+                                    val doubleTapSeek = SettingsManager.getDoubleTapSeek(context) * 1000L
+                                    val isForwardSeek = downX >= screenWidth / 2
+
+                                    accumulatedDoubleTapSeek = if (lastDoubleTapSeekForward == isForwardSeek) {
+                                        accumulatedDoubleTapSeek + doubleTapSeek
+                                    } else {
+                                        doubleTapSeek
+                                    }
+                                    lastDoubleTapSeekForward = isForwardSeek
+
+                                    mediaController?.let { controller ->
+                                        val currentPos = controller.currentPosition
+
+                                        if (!isForwardSeek) {
+                                            // Lado esquerdo - voltar
+                                            val newPosition =
+                                                (currentPos - doubleTapSeek).coerceAtLeast(0)
+                                            controller.seekTo(newPosition)
+                                            seekIndicator = "-${accumulatedDoubleTapSeek / 1000}s"
+                                            seekSide = Alignment.CenterStart
+                                        } else {
+                                            // Lado direito - avançar
+                                            val newPosition = currentPos + doubleTapSeek
+                                            controller.seekTo(newPosition)
+                                            seekIndicator = "+${accumulatedDoubleTapSeek / 1000}s"
+                                            seekSide = Alignment.CenterEnd
+                                        }
+                                    }
+                                }
+
+                                val tapSequenceTime = currentTime
+                                coroutineScope.launch {
+                                    delay(doubleTapTimeWindow)
+                                    if (lastTapTime == tapSequenceTime) {
+                                        tapCount = 0
+                                        accumulatedDoubleTapSeek = 0L
+                                        lastDoubleTapSeekForward = null
+                                    }
+                                }
+                            }
+                        }
+                    }
+            ) {
+                // PlayerView em background
+                AndroidView(
+                    factory = { playerView },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = videoZoom
+                            scaleY = videoZoom
+                            translationX = videoOffsetX
+                            translationY = videoOffsetY
+                        }
+                )
+
+                if (isWaitingForRotationGate) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black)
+                    )
+                }
+
+                // Indicadores visuais de gestos
+                GestureIndicators(
+                    seekInfo = seekIndicator,
+                    seekAlignment = seekSide,
+                    volumeInfo = volumeIndicator,
+                    brightnessInfo = brightnessIndicator
+                )
+
+                if (hasLoadedVideo && showBlockingBufferingUi && !isSeekingActive && !isPlaying && !hasRenderedFirstFrame) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            strokeWidth = 3.dp,
+                            modifier = Modifier.size(42.dp)
+                        )
+                    }
+                }
+
+                // Interface customizada com ícones de volume e brilho
+                AnimatedVisibility(
+                    visible = (controlsVisible || isSeekingActive) && !isInPiPMode && hasLoadedVideo && !showBlockingBufferingUi,
+                    enter = fadeIn(animationSpec = tween(300)),
+                    exit = fadeOut(animationSpec = tween(300))
+                ) {
+                    CustomVideoControls(
+                        mediaController = mediaController,
+                        currentPosition = currentPosition,
+                        duration = duration,
+                        isPlaying = isPlaying,
+                        videoTitle = currentVideoTitle,
+                        videoPath = currentVideoPath,
+                        onSeekStart = {
+                            isSeekingActive = true
+                            pendingAutoPlayOnReady = false
+                            resumeAfterRotationGate = false
+                            controlsVisible = true
+                            resetUITimer()
+                            mediaController?.pause()
+                        },
+                        onSeekEnd = { wasPlayingBeforeSeek ->
+                            isSeekingActive = false
+                            controlsVisible = true
+                            resetUITimer()
+                            if (wasPlayingBeforeSeek) {
+                                mediaController?.play()
+                            }
+                        },
+                        onDeleteClick = {
+                            pausePlaybackForOverlayDialog()
+                            showDeleteDialog = true
+                        },
+                        onTagsClick = { shouldResumeAfterDrawer ->
+                            if (currentVideoPath.isNotEmpty()) {
+                                shouldResumeAfterTagsDialog = shouldResumeAfterDrawer || mediaController?.isPlaying == true
+                                if (shouldResumeAfterTagsDialog) {
+                                    mediaController?.pause()
+                                }
+                                coroutineScope.launch {
+                                    val scope = getTagScopeForPath(currentVideoPath)
+                                    coroutineScope {
+                                        val commonTagsDeferred = async(kotlinx.coroutines.Dispatchers.IO) {
+                                            VideoTagStore.getCommonTagIds(context, listOf(currentVideoPath), scope)
+                                        }
+                                        if (availableTagsScope != scope || availableTags.isEmpty()) {
+                                            availableTags = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                                VideoTagStore.getAllTags(context, scope)
+                                            }
+                                            availableTagsScope = scope
+                                        }
+                                        commonSelectedTagIds = commonTagsDeferred.await()
+                                    }
+                                    showVideoTagsDialog = true
+                                }
+                            }
+                        },
+                        onBackClick = onDismiss,
+                        resetUITimer = resetUITimer,
+                        repeatMode = repeatMode,
+                        onRepeatModeChange = { newMode ->
+                            repeatMode = newMode
+
+                            mediaController?.let { controller ->
+                                controller.repeatMode = when (newMode) {
+                                    RepeatMode.NONE -> Player.REPEAT_MODE_OFF
+                                    RepeatMode.REPEAT_ALL -> Player.REPEAT_MODE_ALL
+                                    RepeatMode.REPEAT_ONE -> Player.REPEAT_MODE_ONE
+                                }
+                            }
+                        },
+                        playbackSpeed = playbackSpeed,
+                        onPlaybackSpeedChange = { newSpeed ->
+                            playbackSpeed = newSpeed
+                            SettingsManager.setPlaybackSpeed(context, newSpeed.value)
+                            mediaController?.setPlaybackSpeed(newSpeed.value)
+                        },
+                        onSpeedDialogOpen = {
+                            isSpeedDialogOpen = true
+                            pausePlaybackForOverlayDialog()
+                            resetUITimer()
+                        },
+                        onSpeedDialogClose = {
+                            isSpeedDialogOpen = false
+                            resumePlaybackAfterOverlayDialog()
+                        },
+                        currentVideoTagCount = currentVideoTagCount,
+                        rotationMode = rotationMode,
+                        onRotationModeChange = { newMode ->
+                            val wasWaitingForRotation = isWaitingForRotationGate
+                            val videoSize = mediaController?.videoSize
+                            rotationFeedbackTarget = when (newMode) {
+                                RotationMode.PORTRAIT -> Configuration.ORIENTATION_PORTRAIT
+                                RotationMode.LANDSCAPE -> Configuration.ORIENTATION_LANDSCAPE
+                                RotationMode.VIDEO -> when {
+                                    videoSize == null || videoSize.width <= 0 || videoSize.height <= 0 -> Configuration.ORIENTATION_UNDEFINED
+                                    videoSize.width > videoSize.height -> Configuration.ORIENTATION_LANDSCAPE
+                                    else -> Configuration.ORIENTATION_PORTRAIT
+                                }
+                                RotationMode.SENSOR -> Configuration.ORIENTATION_UNDEFINED
+                            }
+                            rotationMode = newMode
+                            SettingsManager.setRotationMode(context, newMode)
+                            lastRotationFeedbackMode = newMode
+                            rotationFeedbackMode = newMode
+                            val controller = mediaController
+                            if (controller != null) {
+                                beginRotationGateIfNeeded(controller)
+                                if (
+                                    wasWaitingForRotation &&
+                                    newMode != RotationMode.VIDEO &&
+                                    pendingAutoPlayOnReady &&
+                                    controller.playbackState == Player.STATE_READY &&
+                                    !isSeekingActive &&
+                                    !isPlaybackBlockedByDialog()
+                                ) {
+                                    pendingAutoPlayOnReady = false
+                                    controller.play()
+                                }
+                            } else {
+                                applyRotationForCurrentMode()
+                            }
+                        },
+                        // Legendas
+                        hasSubtitles = availableSubtitles.isNotEmpty(),
+                        subtitlesEnabled = selectedSubtitleTrack != null || isExternalSubtitleSelected,
+                        onSubtitlesClick = {
+                            pausePlaybackForOverlayDialog()
+                            showTrackSelectionDialog = true
+                        },
+                        onPiPClick = {
+                            controlsVisible = false
+                            (activity as? MainActivity)?.enterPiPMode()
+                        },
+                        sleepTimerActive = sleepTimerActive,
+                        sleepTimerEndAtMs = sleepTimerEndAtMs,
+                        onSleepTimerStarted = { endAtMs ->
+                            sleepTimerActive = true
+                            sleepTimerEndAtMs = endAtMs
+                        },
+                        onSleepTimerCleared = {
+                            sleepTimerActive = false
+                            sleepTimerEndAtMs = 0L
+                        },
+                        onSleepTimerConfirmed = {}
+                    )
+                }
+
+                AnimatedVisibility(
+                    visible = rotationFeedbackVisible && !isInPiPMode,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .offset(y = 64.dp)
+                        .padding(horizontal = 16.dp),
+                    enter = fadeIn(animationSpec = tween(160)),
+                    exit = fadeOut(animationSpec = tween(160))
+                ) {
+                    val message = when (lastRotationFeedbackMode) {
+                        RotationMode.VIDEO -> R.string.player_rotation_feedback_video
+                        RotationMode.SENSOR -> R.string.player_rotation_feedback_sensor
+                        RotationMode.PORTRAIT -> R.string.player_rotation_feedback_portrait
+                        RotationMode.LANDSCAPE -> R.string.player_rotation_feedback_landscape
+                    }
+                    Box(
+                        modifier = Modifier
+                            .background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(16.dp))
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = stringResource(message),
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+
+                AnimatedVisibility(
+                    visible = controlsVisible && videoZoom > 1.01f && !isInPiPMode && hasLoadedVideo,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility.only(WindowInsetsSides.Top))
+                        .padding(top = 82.dp),
+                    enter = fadeIn(animationSpec = tween(300)),
+                    exit = fadeOut(animationSpec = tween(300))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .background(Color.Black.copy(alpha = 0.58f), RoundedCornerShape(999.dp))
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "${(videoZoom * 100).roundToInt()}%",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+    }
+}
+
+// GestureIndicators, setVolume, setBrightness e findActivity movidos para arquivos separados
+// GestureIndicators.kt, PlayerUtils.kt
